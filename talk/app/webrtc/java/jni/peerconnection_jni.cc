@@ -105,6 +105,7 @@ using rtc::ThreadManager;
 using rtc::scoped_ptr;
 using webrtc::AudioSourceInterface;
 using webrtc::AudioTrackInterface;
+using webrtc::AudioTrackSinkInterface;
 using webrtc::AudioTrackVector;
 using webrtc::CreateSessionDescriptionObserver;
 using webrtc::DataBuffer;
@@ -852,6 +853,46 @@ class JavaVideoRendererWrapper : public VideoRendererInterface {
   ScopedGlobalRef<jclass> j_byte_buffer_class_;
 };
 
+class JavaAudioTrackSinkWrapper : public AudioTrackSinkInterface {
+ public:
+  JavaAudioTrackSinkWrapper(JNIEnv* jni, jobject j_callbacks)
+      : j_callbacks_(jni, j_callbacks),
+        j_on_data_id_(GetMethodID(
+            jni, GetObjectClass(jni, j_callbacks), "onData",
+            "(Ljava/nio/ByteBuffer;IIII)V")){
+    CHECK_EXCEPTION(jni);
+  }
+
+  virtual ~JavaAudioTrackSinkWrapper() {}
+
+  void OnData(const void* audio_data,
+              int bits_per_sample,
+              int sample_rate,
+              int number_of_channels,
+              size_t number_of_frames) override {
+    ScopedLocalRefFrame local_ref_frame(jni());
+    size_t capacity = bits_per_sample * number_of_channels * number_of_frames / 8;
+    jobject j_audio_data =
+        jni()->NewDirectByteBuffer(const_cast<void*>(audio_data), capacity);
+    jni()->CallVoidMethod(*j_callbacks_, j_on_data_id_,
+                          j_audio_data,
+                          bits_per_sample,
+                          sample_rate,
+                          number_of_channels,
+                          number_of_frames);
+    CHECK_EXCEPTION(jni());
+  }
+
+ private:
+
+  JNIEnv* jni() {
+    return AttachCurrentThreadIfNeeded();
+  }
+
+  ScopedGlobalRef<jobject> j_callbacks_;
+  jmethodID j_on_data_id_;
+};
+
 
 static DataChannelInterface* ExtractNativeDC(JNIEnv* jni, jobject j_dc) {
   jfieldID native_dc_id = GetFieldID(jni,
@@ -976,6 +1017,10 @@ JOW(void, VideoRenderer_freeWrappedVideoRenderer)(JNIEnv*, jclass, jlong j_p) {
 JOW(void, VideoRenderer_releaseNativeFrame)(
     JNIEnv* jni, jclass, jlong j_frame_ptr) {
   delete reinterpret_cast<const cricket::VideoFrame*>(j_frame_ptr);
+}
+
+JOW(void, AudioTrackSink_freeWrappedAudioTrackSink)(JNIEnv*, jclass, jlong j_p) {
+  delete reinterpret_cast<JavaAudioTrackSinkWrapper*>(j_p);
 }
 
 JOW(void, MediaStreamTrack_free)(JNIEnv*, jclass, jlong j_p) {
@@ -2004,6 +2049,13 @@ JOW(void, VideoRenderer_nativeCopyPlane)(
   }
 }
 
+JOW(jlong, AudioTrackSink_nativeWrapAudioTrackSink)(
+    JNIEnv* jni, jclass, jobject j_callbacks) {
+  scoped_ptr<JavaAudioTrackSinkWrapper> sink(
+      new JavaAudioTrackSinkWrapper(jni, j_callbacks));
+  return (jlong)sink.release();
+}
+
 JOW(void, VideoSource_stop)(JNIEnv* jni, jclass, jlong j_p) {
   reinterpret_cast<VideoSourceInterface*>(j_p)->Stop();
 }
@@ -2060,6 +2112,20 @@ JOW(void, VideoTrack_nativeRemoveRenderer)(
     jlong j_video_track_pointer, jlong j_renderer_pointer) {
   reinterpret_cast<VideoTrackInterface*>(j_video_track_pointer)->RemoveRenderer(
       reinterpret_cast<VideoRendererInterface*>(j_renderer_pointer));
+}
+
+JOW(void, AudioTrack_nativeAddSink)(
+    JNIEnv* jni, jclass,
+    jlong j_audio_track_pointer, jlong j_sink_pointer) {
+  reinterpret_cast<AudioTrackInterface*>(j_audio_track_pointer)->AddSink(
+      reinterpret_cast<AudioTrackSinkInterface*>(j_sink_pointer));
+}
+
+JOW(void, AudioTrack_nativeRemoveSink)(
+    JNIEnv* jni, jclass,
+    jlong j_audio_track_pointer, jlong j_sink_pointer) {
+  reinterpret_cast<AudioTrackInterface*>(j_audio_track_pointer)->RemoveSink(
+      reinterpret_cast<AudioTrackSinkInterface*>(j_sink_pointer));
 }
 
 JOW(jlong, CallSessionFileRotatingLogSink_nativeAddSink)(

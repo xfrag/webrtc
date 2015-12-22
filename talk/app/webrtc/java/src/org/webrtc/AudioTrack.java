@@ -27,9 +27,41 @@
 
 package org.webrtc;
 
+import java.util.LinkedList;
+
 /** Java wrapper for a C++ AudioTrackInterface */
 public class AudioTrack extends MediaStreamTrack {
+  private final LinkedList<AudioTrackSink> sinks =
+      new LinkedList<AudioTrackSink>();
+
   public AudioTrack(long nativeTrack) {
     super(nativeTrack);
   }
+
+  public void addSink(AudioTrackSink sink) {
+    sinks.add(sink);
+    nativeAddSink(nativeTrack, sink.nativeAudioTrackSink);
+  }
+
+  public void removeSink(AudioTrackSink sink) {
+    if (!sinks.remove(sink)) {
+      return;
+    }
+    nativeRemoveSink(nativeTrack, sink.nativeAudioTrackSink);
+    sink.dispose();
+  }
+
+  public void dispose() {
+    while (!sinks.isEmpty()) {
+      removeSink(sinks.getFirst());
+    }
+    super.dispose();
+  }
+
+  private static native void nativeAddSink(
+      long nativeTrack, long nativeSink);
+
+  private static native void nativeRemoveSink(
+      long nativeTrack, long nativeSink);
+
 }
