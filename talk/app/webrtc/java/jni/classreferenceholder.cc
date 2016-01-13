@@ -64,6 +64,7 @@ void FreeGlobalClassReferenceHolder() {
 ClassReferenceHolder::ClassReferenceHolder(JNIEnv* jni) {
   LoadClass(jni, "java/nio/ByteBuffer");
   LoadClass(jni, "java/util/ArrayList");
+  LoadClass(jni, "org/webrtc/AppAudioDeviceModule");
   LoadClass(jni, "org/webrtc/AudioTrack");
   LoadClass(jni, "org/webrtc/DataChannel");
   LoadClass(jni, "org/webrtc/DataChannel$Buffer");

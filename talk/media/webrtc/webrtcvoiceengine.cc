@@ -493,7 +493,32 @@ WebRtcVoiceEngine::~WebRtcVoiceEngine() {
   RTC_DCHECK(worker_thread_checker_.CalledOnValidThread());
   LOG(LS_VERBOSE) << "WebRtcVoiceEngine::~WebRtcVoiceEngine";
   if (adm_) {
-    voe_wrapper_.reset();
+
+    // When the voe_wrapper_.reset() line below is executed, the VoiceEngine
+    // generates a warning as below:
+    // (webrtcvoiceengine.cc:961): webrtc: VoiceEngine::Delete did not release
+    //                          the very last reference.  1 references remain.
+
+    // The message originates from voice_engine_impl.cc, where
+    // VoiceEngine::Delete is defined. In all cases (with the reset() call &
+    // without it), the VoiceEngineImpl is being self-deleted. This means that
+    // the reference count reaches 0 in both cases, hence there is no memory
+    // leak.
+
+    // It turns out that the audio_state_ field also holds a reference to the
+    // VoiceEngine. See webrtc::AudioState and webrtc::internal::AudioState. When
+    // the reset function is called below, the ~VoEWrapper() destructor is called
+    // while the AudioState still holds a reference. This leads to the warning
+    // since the ~scoped_voe_engine() destructor for the engine_ field in
+    // VoEWrapper is called, thus triggering a premature call to
+    // VoiceEngine::Delete().
+
+    // If the above analysis is correct, then the same result (no warning
+    // message) must be achieved if audio_state_ gets set to NULL just before the
+    // reset() call on voe_wrapper_ (and indeed this is the case). So we can
+    // conclude that the voe_wrapper_.reset() line can be omitted. 
+
+//    voe_wrapper_.reset();
     adm_->Release();
     adm_ = NULL;
   }
