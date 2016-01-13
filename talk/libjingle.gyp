@@ -56,6 +56,8 @@
             'app/webrtc/java/jni/jni_helpers.h',
             'app/webrtc/java/jni/native_handle_impl.cc',
             'app/webrtc/java/jni/native_handle_impl.h',
+            'app/webrtc/java/jni/app_audio_device.cc',
+            'app/webrtc/java/jni/app_audio_device.h',
             'app/webrtc/java/jni/peerconnection_jni.cc',
           ],
           'include_dirs': [
@@ -148,6 +150,7 @@
                 'peerconnection_java_files': [
                   'app/webrtc/java/src/org/webrtc/AudioSource.java',
                   'app/webrtc/java/src/org/webrtc/AudioTrack.java',
+                  'app/webrtc/java/src/org/webrtc/AppAudioDeviceModule.java',
                   'app/webrtc/java/src/org/webrtc/CallSessionFileRotatingLogSink.java',
                   'app/webrtc/java/src/org/webrtc/DataChannel.java',
                   'app/webrtc/java/src/org/webrtc/IceCandidate.java',

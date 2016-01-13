@@ -62,6 +62,7 @@
 #include "talk/app/webrtc/java/jni/classreferenceholder.h"
 #include "talk/app/webrtc/java/jni/jni_helpers.h"
 #include "talk/app/webrtc/java/jni/native_handle_impl.h"
+#include "talk/app/webrtc/java/jni/app_audio_device.h"
 #include "talk/app/webrtc/dtlsidentitystore.h"
 #include "talk/app/webrtc/mediaconstraintsinterface.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
@@ -1142,8 +1143,7 @@ void OwnedFactoryAndThreads::InvokeJavaCallbacksOnFactoryThreads() {
       Bind(&OwnedFactoryAndThreads::JavaCallbackOnFactoryThreads, this));
 }
 
-JOW(jlong, PeerConnectionFactory_nativeCreatePeerConnectionFactory)(
-    JNIEnv* jni, jclass) {
+jlong createJavaPCF(AudioDeviceModule* adm) {
   // talk/ assumes pretty widely that the current Thread is ThreadManager'd, but
   // ThreadManager only WrapCurrentThread()s the thread where it is first
   // created.  Since the semantics around when auto-wrapping happens in
@@ -1172,7 +1172,7 @@ JOW(jlong, PeerConnectionFactory_nativeCreatePeerConnectionFactory)(
   rtc::scoped_refptr<PeerConnectionFactoryInterface> factory(
       webrtc::CreatePeerConnectionFactory(worker_thread,
                                           signaling_thread,
-                                          NULL,
+                                          adm,
                                           encoder_factory,
                                           decoder_factory));
   RTC_CHECK(factory) << "Failed to create the peer connection factory; "
@@ -1183,6 +1183,11 @@ JOW(jlong, PeerConnectionFactory_nativeCreatePeerConnectionFactory)(
       network_monitor_factory, factory.release());
   owned_factory->InvokeJavaCallbacksOnFactoryThreads();
   return jlongFromPointer(owned_factory);
+}
+
+JOW(jlong, PeerConnectionFactory_nativeCreatePeerConnectionFactory)(
+    JNIEnv*, jclass, jlong j_p) {
+  return createJavaPCF(reinterpret_cast<AudioDeviceModule*>(j_p));
 }
 
 JOW(void, PeerConnectionFactory_nativeFreeFactory)(JNIEnv*, jclass, jlong j_p) {
