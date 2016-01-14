@@ -258,39 +258,54 @@ public abstract class AppAudioDeviceModule {
     //                       Audio Device Buffer.
     // ============================================================================
 
-    protected void dataIsRecorded(byte[] buffer) { dataIsRecorded(buffer, 0, buffer.length); }
+    protected void dataIsRecorded(byte[] src) { dataIsRecorded(src, 0, src.length); }
 
-    protected void dataIsRecorded(byte[] buffer, int offset, int length) {
+    protected void dataIsRecorded(byte[] src, int offset, int length) {
 
         // Check parameters.
-        if (buffer.length - offset > length)
+        if (src.length - offset > length)
             throw new IllegalArgumentException("Invalid offset-length parameters.");
 
         // Prevent concurrent access to the recording buffer.
         boolean gotLock = false;
         try {
 
-            if (gotLock = recordingLock.tryLock()) unsafeDataIsRecorded(buffer, offset, length);
+            if (gotLock = recordingLock.tryLock()) unsafeDataIsRecorded(src, offset, length);
             else throw new ConcurrentModificationException("Concurrent access to recording buffer.");
 
         } finally { if (gotLock) recordingLock.unlock(); }
 
     }
 
-    private void unsafeDataIsRecorded(byte[] buffer, int offset, int length) {
+    protected void dataIsRecorded(ByteBuffer src) {
+
+        // Prevent concurrent access to the recording buffer.
+        boolean gotLock = false;
+        try {
+
+            if (gotLock = recordingLock.tryLock()) unsafeDataIsRecorded(src);
+            else throw new ConcurrentModificationException("Concurrent access to recording buffer.");
+
+        } finally { if (gotLock) recordingLock.unlock(); }
+
+    }
+
+    private void unsafeDataIsRecorded(byte[] src, int offset, int length) {
+
+        int remaining;
 
         while (length > 0) {
 
-            int remaining = recordingBuffer.remaining();
+            remaining = recordingBuffer.remaining();
             if (remaining >= length) {
 
-                recordingBuffer.put(buffer, offset, length);
+                recordingBuffer.put(src, offset, length);
                 remaining -= length;
                 length = 0;
 
             } else {
 
-                recordingBuffer.put(buffer, offset, remaining);
+                recordingBuffer.put(src, offset, remaining);
                 offset += remaining;
                 length -= remaining;
                 remaining = 0;
@@ -308,11 +323,47 @@ public abstract class AppAudioDeviceModule {
 
     }
 
-    protected void getPlayoutData(byte[] buffer) { getPlayoutData(buffer, 0, buffer.length); }
+    private void unsafeDataIsRecorded(ByteBuffer src) {
 
-    protected void getPlayoutData(byte[] buffer, int offset, int length) {
+        int srcRemaining = src.remaining();
+        int srcLimit = src.limit();
+        int recRemaining;
 
-        if (buffer.length - offset > length)
+        while (srcRemaining > 0) {
+
+            recRemaining = recordingBuffer.remaining();
+            if (recRemaining >= srcRemaining) {
+
+                recordingBuffer.put(src);
+                recRemaining -= srcRemaining;
+                srcRemaining = 0;
+
+            } else {
+
+                src.limit(src.position() + recRemaining);
+                recordingBuffer.put(src);
+                src.limit(srcLimit);
+                srcRemaining -= recRemaining;
+                recRemaining = 0;
+
+            }
+
+            if (recRemaining == 0) {
+
+                nativeDataIsRecorded(nativeModule);
+                recordingBuffer.clear();
+
+            }
+
+        }
+
+    }
+
+    protected void getPlayoutData(byte[] dst) { getPlayoutData(dst, 0, dst.length); }
+
+    protected void getPlayoutData(byte[] dst, int offset, int length) {
+
+        if (dst.length - offset > length)
             throw new IllegalArgumentException("Invalid offset-length parameters.");
 
         if (length == 0) return;
@@ -321,18 +372,33 @@ public abstract class AppAudioDeviceModule {
         boolean gotLock = false;
         try {
 
-            if (gotLock = playoutLock.tryLock()) unsafeGetPlayoutData(buffer, offset, length);
+            if (gotLock = playoutLock.tryLock()) unsafeGetPlayoutData(dst, offset, length);
             else throw new ConcurrentModificationException("Concurrent access to recording buffer.");
 
         } finally { if (gotLock) playoutLock.unlock(); }
 
     }
 
-    private void unsafeGetPlayoutData(byte[] buffer, int offset, int length) {
+    protected void getPlayoutData(ByteBuffer dst) {
+
+        // Prevent concurrent access to the playback buffer.
+        boolean gotLock = false;
+        try {
+
+            if (gotLock = playoutLock.tryLock()) unsafeGetPlayoutData(dst);
+            else throw new ConcurrentModificationException("Concurrent access to recording buffer.");
+
+        } finally { if (gotLock) playoutLock.unlock(); }
+
+    }
+
+    private void unsafeGetPlayoutData(byte[] dst, int offset, int length) {
+
+        int remaining;
 
         do {
 
-            int remaining = playoutBuffer.remaining();
+            remaining = playoutBuffer.remaining();
             if (remaining == 0) {
 
                 nativeGetPlayoutData(nativeModule);
@@ -342,12 +408,12 @@ public abstract class AppAudioDeviceModule {
 
             if (remaining >= length) {
 
-                playoutBuffer.get(buffer, offset, length);
+                playoutBuffer.get(dst, offset, length);
                 length = 0;
 
             } else {
 
-                playoutBuffer.get(buffer, offset, remaining);
+                playoutBuffer.get(dst, offset, remaining);
                 offset += remaining;
                 length -= remaining;
 
@@ -355,6 +421,41 @@ public abstract class AppAudioDeviceModule {
 
 
         } while (length > 0);
+
+    }
+
+    private void unsafeGetPlayoutData(ByteBuffer dst) {
+
+        int playRemaining;
+        int dstRemaining;
+
+        do {
+
+            playRemaining = playoutBuffer.remaining();
+            dstRemaining = dst.remaining();
+
+            if (playRemaining == 0) {
+
+                nativeGetPlayoutData(nativeModule);
+                playRemaining = playoutBuffer.clear().remaining();
+
+            }
+
+            if (playRemaining >= dstRemaining) {
+
+                playoutBuffer.limit(playoutBuffer.position() + dstRemaining);
+                dst.put(playoutBuffer);
+                playoutBuffer.limit(playoutBuffer.capacity());
+                dstRemaining = 0;
+
+            } else {
+
+                dst.put(playoutBuffer);
+                dstRemaining -= playRemaining;
+
+            }
+
+        } while (dstRemaining > 0);
 
     }
 
