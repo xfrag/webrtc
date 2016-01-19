@@ -123,6 +123,9 @@
               ],
               'conditions': [
                 ['use_gtk==1', {
+                  'defines': [
+                    'USE_GTK',
+                  ],
                   'link_settings': {
                     'libraries': [
                       '<!@(pkg-config --libs-only-l gobject-2.0 gthread-2.0'

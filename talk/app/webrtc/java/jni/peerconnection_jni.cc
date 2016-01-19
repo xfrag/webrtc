@@ -1959,12 +1959,14 @@ JOW(jobject, VideoCapturer_nativeCreateVideoCapturer)(
   return j_video_capturer;
 }
 
+#if defined(USE_GTK)
 JOW(jlong, VideoRenderer_nativeCreateGuiVideoRenderer)(
     JNIEnv* jni, jclass, int x, int y) {
   scoped_ptr<VideoRendererWrapper> renderer(VideoRendererWrapper::Create(
       cricket::VideoRendererFactory::CreateGuiVideoRenderer(x, y)));
   return (jlong)renderer.release();
 }
+#endif
 
 JOW(jlong, VideoRenderer_nativeWrapVideoRenderer)(
     JNIEnv* jni, jclass, jobject j_callbacks) {
