@@ -291,7 +291,7 @@ struct CodecInst {
   char plname[RTP_PAYLOAD_NAME_SIZE];
   int plfreq;
   int pacsize;
-  int channels;
+  size_t channels;
   int rate;  // bits/sec unlike {start,min,max}Bitrate elsewhere in this file!
 
   bool operator==(const CodecInst& other) const {
@@ -310,12 +310,6 @@ struct CodecInst {
 
 // RTP
 enum {kRtpCsrcSize = 15}; // RFC 3550 page 13
-
-enum RTPDirections
-{
-    kRtpIncoming = 0,
-    kRtpOutgoing
-};
 
 enum PayloadFrequencies
 {

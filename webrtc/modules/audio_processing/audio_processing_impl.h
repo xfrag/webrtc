@@ -101,9 +101,10 @@ class AudioProcessingImpl : public AudioProcessing {
   // Hence there is no need for locks in these.
   int proc_sample_rate_hz() const override;
   int proc_split_sample_rate_hz() const override;
-  int num_input_channels() const override;
-  int num_output_channels() const override;
-  int num_reverse_channels() const override;
+  size_t num_input_channels() const override;
+  size_t num_proc_channels() const override;
+  size_t num_output_channels() const override;
+  size_t num_reverse_channels() const override;
   int stream_delay_ms() const override;
   bool was_stream_delay_set() const override
       EXCLUSIVE_LOCKS_REQUIRED(crit_capture_);
@@ -267,28 +268,21 @@ class AudioProcessingImpl : public AudioProcessing {
   // APM constants.
   const struct ApmConstants {
     ApmConstants(int agc_startup_min_volume,
-                 const std::vector<Point> array_geometry,
-                 SphericalPointf target_direction,
                  bool use_new_agc,
-                 bool intelligibility_enabled,
-                 bool beamformer_enabled)
+                 bool intelligibility_enabled)
         :  // Format of processing streams at input/output call sites.
           agc_startup_min_volume(agc_startup_min_volume),
-          array_geometry(array_geometry),
-          target_direction(target_direction),
           use_new_agc(use_new_agc),
-          intelligibility_enabled(intelligibility_enabled),
-          beamformer_enabled(beamformer_enabled) {}
+          intelligibility_enabled(intelligibility_enabled) {}
     int agc_startup_min_volume;
-    std::vector<Point> array_geometry;
-    SphericalPointf target_direction;
     bool use_new_agc;
     bool intelligibility_enabled;
-    bool beamformer_enabled;
   } constants_;
 
   struct ApmCaptureState {
-    ApmCaptureState(bool transient_suppressor_enabled)
+    ApmCaptureState(bool transient_suppressor_enabled,
+                    const std::vector<Point>& array_geometry,
+                    SphericalPointf target_direction)
         : aec_system_delay_jumps(-1),
           delay_offset_ms(0),
           was_stream_delay_set(false),
@@ -298,6 +292,8 @@ class AudioProcessingImpl : public AudioProcessing {
           output_will_be_muted(false),
           key_pressed(false),
           transient_suppressor_enabled(transient_suppressor_enabled),
+          array_geometry(array_geometry),
+          target_direction(target_direction),
           fwd_proc_format(kSampleRate16kHz),
           split_rate(kSampleRate16kHz) {}
     int aec_system_delay_jumps;
@@ -309,6 +305,8 @@ class AudioProcessingImpl : public AudioProcessing {
     bool output_will_be_muted;
     bool key_pressed;
     bool transient_suppressor_enabled;
+    std::vector<Point> array_geometry;
+    SphericalPointf target_direction;
     rtc::scoped_ptr<AudioBuffer> capture_audio;
     // Only the rate and samples fields of fwd_proc_format_ are used because the
     // forward processing number of channels is mutable and is tracked by the
@@ -318,16 +316,18 @@ class AudioProcessingImpl : public AudioProcessing {
   } capture_ GUARDED_BY(crit_capture_);
 
   struct ApmCaptureNonLockedState {
-    ApmCaptureNonLockedState()
+    ApmCaptureNonLockedState(bool beamformer_enabled)
         : fwd_proc_format(kSampleRate16kHz),
           split_rate(kSampleRate16kHz),
-          stream_delay_ms(0) {}
+          stream_delay_ms(0),
+          beamformer_enabled(beamformer_enabled) {}
     // Only the rate and samples fields of fwd_proc_format_ are used because the
     // forward processing number of channels is mutable and is tracked by the
     // capture_audio_.
     StreamConfig fwd_proc_format;
     int split_rate;
     int stream_delay_ms;
+    bool beamformer_enabled;
   } capture_nonlocked_;
 
   struct ApmRenderState {

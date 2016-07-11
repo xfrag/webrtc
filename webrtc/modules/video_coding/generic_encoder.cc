@@ -8,12 +8,15 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
+#include "webrtc/modules/video_coding/generic_encoder.h"
+
+#include <vector>
+
 #include "webrtc/base/checks.h"
 #include "webrtc/base/logging.h"
 #include "webrtc/base/trace_event.h"
 #include "webrtc/engine_configurations.h"
 #include "webrtc/modules/video_coding/encoded_frame.h"
-#include "webrtc/modules/video_coding/generic_encoder.h"
 #include "webrtc/modules/video_coding/media_optimization.h"
 #include "webrtc/system_wrappers/include/critical_section_wrapper.h"
 
@@ -28,8 +31,7 @@ void CopyCodecSpecific(const CodecSpecificInfo* info, RTPVideoHeader* rtp) {
       rtp->codec = kRtpVideoVp8;
       rtp->codecHeader.VP8.InitRTPVideoHeaderVP8();
       rtp->codecHeader.VP8.pictureId = info->codecSpecific.VP8.pictureId;
-      rtp->codecHeader.VP8.nonReference =
-          info->codecSpecific.VP8.nonReference;
+      rtp->codecHeader.VP8.nonReference = info->codecSpecific.VP8.nonReference;
       rtp->codecHeader.VP8.temporalIdx = info->codecSpecific.VP8.temporalIdx;
       rtp->codecHeader.VP8.layerSync = info->codecSpecific.VP8.layerSync;
       rtp->codecHeader.VP8.tl0PicIdx = info->codecSpecific.VP8.tl0PicIdx;
@@ -89,7 +91,7 @@ void CopyCodecSpecific(const CodecSpecificInfo* info, RTPVideoHeader* rtp) {
 }
 }  // namespace
 
-//#define DEBUG_ENCODER_BIT_STREAM
+// #define DEBUG_ENCODER_BIT_STREAM
 
 VCMGenericEncoder::VCMGenericEncoder(
     VideoEncoder* encoder,
@@ -150,6 +152,12 @@ int32_t VCMGenericEncoder::Encode(const VideoFrame& inputFrame,
   vcm_encoded_frame_callback_->SetRotation(rotation_);
 
   int32_t result = encoder_->Encode(inputFrame, codecSpecificInfo, &frameTypes);
+
+  if (vcm_encoded_frame_callback_) {
+    vcm_encoded_frame_callback_->SignalLastEncoderImplementationUsed(
+        encoder_->ImplementationName());
+  }
+
   if (is_screenshare_ &&
       result == WEBRTC_VIDEO_CODEC_TARGET_BITRATE_OVERSHOOT) {
     // Target bitrate exceeded, encoder state has been reset - try again.
@@ -189,10 +197,8 @@ EncoderParameters VCMGenericEncoder::GetEncoderParameters() const {
   return encoder_params_;
 }
 
-int32_t
-VCMGenericEncoder::SetPeriodicKeyFrames(bool enable)
-{
-    return encoder_->SetPeriodicKeyFrames(enable);
+int32_t VCMGenericEncoder::SetPeriodicKeyFrames(bool enable) {
+  return encoder_->SetPeriodicKeyFrames(enable);
 }
 
 int32_t VCMGenericEncoder::RequestFrame(
@@ -201,10 +207,8 @@ int32_t VCMGenericEncoder::RequestFrame(
   return encoder_->Encode(image, NULL, &frame_types);
 }
 
-bool
-VCMGenericEncoder::InternalSource() const
-{
-    return internal_source_;
+bool VCMGenericEncoder::InternalSource() const {
+  return internal_source_;
 }
 
 void VCMGenericEncoder::OnDroppedFrame() {
@@ -219,12 +223,12 @@ int VCMGenericEncoder::GetTargetFramerate() {
   return encoder_->GetTargetFramerate();
 }
 
- /***************************
-  * Callback Implementation
-  ***************************/
+/***************************
+ * Callback Implementation
+ ***************************/
 VCMEncodedFrameCallback::VCMEncodedFrameCallback(
     EncodedImageCallback* post_encode_callback)
-    : _sendCallback(),
+    : send_callback_(),
       _mediaOpt(NULL),
       _payloadType(0),
       _internalSource(false),
@@ -236,41 +240,37 @@ VCMEncodedFrameCallback::VCMEncodedFrameCallback(
 #endif
 {
 #ifdef DEBUG_ENCODER_BIT_STREAM
-    _bitStreamAfterEncoder = fopen("encoderBitStream.bit", "wb");
+  _bitStreamAfterEncoder = fopen("encoderBitStream.bit", "wb");
 #endif
 }
 
-VCMEncodedFrameCallback::~VCMEncodedFrameCallback()
-{
+VCMEncodedFrameCallback::~VCMEncodedFrameCallback() {
 #ifdef DEBUG_ENCODER_BIT_STREAM
-    fclose(_bitStreamAfterEncoder);
+  fclose(_bitStreamAfterEncoder);
 #endif
 }
 
-int32_t
-VCMEncodedFrameCallback::SetTransportCallback(VCMPacketizationCallback* transport)
-{
-    _sendCallback = transport;
-    return VCM_OK;
+int32_t VCMEncodedFrameCallback::SetTransportCallback(
+    VCMPacketizationCallback* transport) {
+  send_callback_ = transport;
+  return VCM_OK;
 }
 
 int32_t VCMEncodedFrameCallback::Encoded(
-    const EncodedImage& encodedImage,
+    const EncodedImage& encoded_image,
     const CodecSpecificInfo* codecSpecificInfo,
     const RTPFragmentationHeader* fragmentationHeader) {
   TRACE_EVENT_INSTANT1("webrtc", "VCMEncodedFrameCallback::Encoded",
-                       "timestamp", encodedImage._timeStamp);
-  RTC_DCHECK(encodedImage._frameType == kVideoFrameKey ||
-             encodedImage._frameType == kVideoFrameDelta);
-  post_encode_callback_->Encoded(encodedImage, NULL, NULL);
+                       "timestamp", encoded_image._timeStamp);
+  post_encode_callback_->Encoded(encoded_image, NULL, NULL);
 
-  if (_sendCallback == NULL) {
+  if (send_callback_ == NULL) {
     return VCM_UNINITIALIZED;
   }
 
 #ifdef DEBUG_ENCODER_BIT_STREAM
   if (_bitStreamAfterEncoder != NULL) {
-    fwrite(encodedImage._buffer, 1, encodedImage._length,
+    fwrite(encoded_image._buffer, 1, encoded_image._length,
            _bitStreamAfterEncoder);
   }
 #endif
@@ -283,25 +283,29 @@ int32_t VCMEncodedFrameCallback::Encoded(
   }
   rtpVideoHeader.rotation = _rotation;
 
-  int32_t callbackReturn = _sendCallback->SendData(
-      _payloadType, encodedImage, *fragmentationHeader, rtpVideoHeaderPtr);
+  int32_t callbackReturn = send_callback_->SendData(
+      _payloadType, encoded_image, *fragmentationHeader, rtpVideoHeaderPtr);
   if (callbackReturn < 0) {
     return callbackReturn;
   }
 
   if (_mediaOpt != NULL) {
-    _mediaOpt->UpdateWithEncodedData(encodedImage);
+    _mediaOpt->UpdateWithEncodedData(encoded_image);
     if (_internalSource)
       return _mediaOpt->DropFrame();  // Signal to encoder to drop next frame.
   }
   return VCM_OK;
 }
 
-void
-VCMEncodedFrameCallback::SetMediaOpt(
-    media_optimization::MediaOptimization *mediaOpt)
-{
-    _mediaOpt = mediaOpt;
+void VCMEncodedFrameCallback::SetMediaOpt(
+    media_optimization::MediaOptimization* mediaOpt) {
+  _mediaOpt = mediaOpt;
+}
+
+void VCMEncodedFrameCallback::SignalLastEncoderImplementationUsed(
+    const char* implementation_name) {
+  if (send_callback_)
+    send_callback_->OnEncoderImplementationName(implementation_name);
 }
 
 }  // namespace webrtc

@@ -128,10 +128,15 @@ struct Codec {
 
 struct AudioCodec : public Codec {
   int bitrate;
-  int channels;
+  size_t channels;
 
   // Creates a codec with the given parameters.
-  AudioCodec(int pt, const std::string& nm, int cr, int br, int cs, int pr);
+  AudioCodec(int id,
+             const std::string& name,
+             int clockrate,
+             int bitrate,
+             size_t channels,
+             int preference);
   // Creates an empty codec.
   AudioCodec();
   AudioCodec(const AudioCodec& c);
@@ -161,8 +166,13 @@ struct VideoCodec : public Codec {
   int framerate;
 
   // Creates a codec with the given parameters.
-  VideoCodec(int pt, const std::string& nm, int w, int h, int fr, int pr);
-  VideoCodec(int pt, const std::string& nm);
+  VideoCodec(int id,
+             const std::string& name,
+             int width,
+             int height,
+             int framerate,
+             int preference);
+  VideoCodec(int id, const std::string& name);
   // Creates an empty codec.
   VideoCodec();
   VideoCodec(const VideoCodec& c);

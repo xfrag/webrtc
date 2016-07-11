@@ -477,8 +477,8 @@ void PopulateAudioFrame(AudioFrame* frame,
                         RandomGenerator* rand_gen) {
   ASSERT_GT(amplitude, 0);
   ASSERT_LE(amplitude, 32767);
-  for (int ch = 0; ch < frame->num_channels_; ch++) {
-    for (int k = 0; k < static_cast<int>(frame->samples_per_channel_); k++) {
+  for (size_t ch = 0; ch < frame->num_channels_; ch++) {
+    for (size_t k = 0; k < frame->samples_per_channel_; k++) {
       // Store random 16 bit number between -(amplitude+1) and
       // amplitude.
       frame->data_[k * ch] =

@@ -17,7 +17,6 @@
 #include "webrtc/modules/include/module_common_types.h"
 #include "webrtc/system_wrappers/include/sleep.h"
 #include "webrtc/test/testsupport/fileutils.h"
-#include "webrtc/test/testsupport/gtest_disable.h"
 
 namespace webrtc {
 
@@ -154,7 +153,7 @@ class TargetDelayTest : public ::testing::Test {
       ASSERT_EQ(0, acm_->PlayoutData10Ms(-1, &frame));
       // Had to use ASSERT_TRUE, ASSERT_EQ generated error.
       ASSERT_TRUE(kSampleRateHz == frame.sample_rate_hz_);
-      ASSERT_EQ(1, frame.num_channels_);
+      ASSERT_EQ(1u, frame.num_channels_);
       ASSERT_TRUE(kSampleRateHz / 100 == frame.samples_per_channel_);
     }
   }
@@ -199,23 +198,50 @@ class TargetDelayTest : public ::testing::Test {
   uint8_t payload_[kPayloadLenBytes];
 };
 
-TEST_F(TargetDelayTest, DISABLED_ON_ANDROID(OutOfRangeInput)) {
+#if defined(WEBRTC_ANDROID)
+#define MAYBE_OutOfRangeInput DISABLED_OutOfRangeInput
+#else
+#define MAYBE_OutOfRangeInput OutOfRangeInput
+#endif
+TEST_F(TargetDelayTest, MAYBE_OutOfRangeInput) {
   OutOfRangeInput();
 }
 
-TEST_F(TargetDelayTest, DISABLED_ON_ANDROID(NoTargetDelayBufferSizeChanges)) {
+#if defined(WEBRTC_ANDROID)
+#define MAYBE_NoTargetDelayBufferSizeChanges \
+  DISABLED_NoTargetDelayBufferSizeChanges
+#else
+#define MAYBE_NoTargetDelayBufferSizeChanges NoTargetDelayBufferSizeChanges
+#endif
+TEST_F(TargetDelayTest, MAYBE_NoTargetDelayBufferSizeChanges) {
   NoTargetDelayBufferSizeChanges();
 }
 
-TEST_F(TargetDelayTest, DISABLED_ON_ANDROID(WithTargetDelayBufferNotChanging)) {
+#if defined(WEBRTC_ANDROID)
+#define MAYBE_WithTargetDelayBufferNotChanging \
+  DISABLED_WithTargetDelayBufferNotChanging
+#else
+#define MAYBE_WithTargetDelayBufferNotChanging WithTargetDelayBufferNotChanging
+#endif
+TEST_F(TargetDelayTest, MAYBE_WithTargetDelayBufferNotChanging) {
   WithTargetDelayBufferNotChanging();
 }
 
-TEST_F(TargetDelayTest, DISABLED_ON_ANDROID(RequiredDelayAtCorrectRange)) {
+#if defined(WEBRTC_ANDROID)
+#define MAYBE_RequiredDelayAtCorrectRange DISABLED_RequiredDelayAtCorrectRange
+#else
+#define MAYBE_RequiredDelayAtCorrectRange RequiredDelayAtCorrectRange
+#endif
+TEST_F(TargetDelayTest, MAYBE_RequiredDelayAtCorrectRange) {
   RequiredDelayAtCorrectRange();
 }
 
-TEST_F(TargetDelayTest, DISABLED_ON_ANDROID(TargetDelayBufferMinMax)) {
+#if defined(WEBRTC_ANDROID)
+#define MAYBE_TargetDelayBufferMinMax DISABLED_TargetDelayBufferMinMax
+#else
+#define MAYBE_TargetDelayBufferMinMax TargetDelayBufferMinMax
+#endif
+TEST_F(TargetDelayTest, MAYBE_TargetDelayBufferMinMax) {
   TargetDelayBufferMinMax();
 }
 

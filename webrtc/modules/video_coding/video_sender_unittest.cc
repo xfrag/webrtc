@@ -24,7 +24,6 @@
 #include "webrtc/system_wrappers/include/clock.h"
 #include "webrtc/test/frame_generator.h"
 #include "webrtc/test/testsupport/fileutils.h"
-#include "webrtc/test/testsupport/gtest_disable.h"
 
 using ::testing::_;
 using ::testing::AllOf;
@@ -41,9 +40,7 @@ using webrtc::test::FrameGenerator;
 namespace webrtc {
 namespace vcm {
 namespace {
-enum {
-  kMaxNumberOfTemporalLayers = 3
-};
+enum { kMaxNumberOfTemporalLayers = 3 };
 
 struct Vp8StreamInfo {
   float framerate_fps[kMaxNumberOfTemporalLayers];
@@ -87,7 +84,7 @@ class EmptyFrameGenerator : public FrameGenerator {
 
 class PacketizationCallback : public VCMPacketizationCallback {
  public:
-  PacketizationCallback(Clock* clock)
+  explicit PacketizationCallback(Clock* clock)
       : clock_(clock), start_time_ms_(clock_->TimeInMilliseconds()) {}
 
   virtual ~PacketizationCallback() {}
@@ -208,19 +205,14 @@ class TestVideoSenderWithMockEncoder : public TestVideoSender {
   void SetUp() override {
     TestVideoSender::SetUp();
     sender_->RegisterExternalEncoder(&encoder_, kUnusedPayloadType, false);
-    memset(&settings_, 0, sizeof(settings_));
-    EXPECT_EQ(0, VideoCodingModule::Codec(kVideoCodecVP8, &settings_));
+    VideoCodingModule::Codec(kVideoCodecVP8, &settings_);
     settings_.numberOfSimulcastStreams = kNumberOfStreams;
-    ConfigureStream(kDefaultWidth / 4,
-                    kDefaultHeight / 4,
-                    100,
+    ConfigureStream(kDefaultWidth / 4, kDefaultHeight / 4, 100,
                     &settings_.simulcastStream[0]);
-    ConfigureStream(kDefaultWidth / 2,
-                    kDefaultHeight / 2,
-                    500,
+    ConfigureStream(kDefaultWidth / 2, kDefaultHeight / 2, 500,
                     &settings_.simulcastStream[1]);
-    ConfigureStream(
-        kDefaultWidth, kDefaultHeight, 1200, &settings_.simulcastStream[2]);
+    ConfigureStream(kDefaultWidth, kDefaultHeight, 1200,
+                    &settings_.simulcastStream[2]);
     settings_.plType = kUnusedPayloadType;  // Use the mocked encoder.
     generator_.reset(
         new EmptyFrameGenerator(settings_.width, settings_.height));
@@ -244,12 +236,11 @@ class TestVideoSenderWithMockEncoder : public TestVideoSender {
     assert(stream < kNumberOfStreams);
     std::vector<FrameType> frame_types(kNumberOfStreams, kVideoFrameDelta);
     frame_types[stream] = kVideoFrameKey;
-    EXPECT_CALL(
-        encoder_,
-        Encode(_,
-               _,
-               Pointee(ElementsAreArray(&frame_types[0], frame_types.size()))))
-        .Times(1).WillRepeatedly(Return(0));
+    EXPECT_CALL(encoder_,
+                Encode(_, _, Pointee(ElementsAreArray(&frame_types[0],
+                                                      frame_types.size()))))
+        .Times(1)
+        .WillRepeatedly(Return(0));
   }
 
   static void ConfigureStream(int width,
@@ -388,8 +379,7 @@ class TestVideoSenderWithVp8 : public TestVideoSender {
                                       int height,
                                       int temporal_layers) {
     VideoCodec codec;
-    memset(&codec, 0, sizeof(codec));
-    EXPECT_EQ(0, VideoCodingModule::Codec(kVideoCodecVP8, &codec));
+    VideoCodingModule::Codec(kVideoCodecVP8, &codec);
     codec.width = width;
     codec.height = height;
     codec.codecSpecific.VP8.numberOfTemporalLayers = temporal_layers;
@@ -431,8 +421,12 @@ class TestVideoSenderWithVp8 : public TestVideoSender {
   int available_bitrate_kbps_;
 };
 
-TEST_F(TestVideoSenderWithVp8,
-       DISABLED_ON_IOS(DISABLED_ON_ANDROID(FixedTemporalLayersStrategy))) {
+#if defined(WEBRTC_ANDROID) || defined(WEBRTC_IOS)
+#define MAYBE_FixedTemporalLayersStrategy DISABLED_FixedTemporalLayersStrategy
+#else
+#define MAYBE_FixedTemporalLayersStrategy FixedTemporalLayersStrategy
+#endif
+TEST_F(TestVideoSenderWithVp8, MAYBE_FixedTemporalLayersStrategy) {
   const int low_b = codec_bitrate_kbps_ * kVp8LayerRateAlloction[2][0];
   const int mid_b = codec_bitrate_kbps_ * kVp8LayerRateAlloction[2][1];
   const int high_b = codec_bitrate_kbps_ * kVp8LayerRateAlloction[2][2];
@@ -446,8 +440,13 @@ TEST_F(TestVideoSenderWithVp8,
   }
 }
 
-TEST_F(TestVideoSenderWithVp8,
-       DISABLED_ON_IOS(DISABLED_ON_ANDROID(RealTimeTemporalLayersStrategy))) {
+#if defined(WEBRTC_ANDROID) || defined(WEBRTC_IOS)
+#define MAYBE_RealTimeTemporalLayersStrategy \
+  DISABLED_RealTimeTemporalLayersStrategy
+#else
+#define MAYBE_RealTimeTemporalLayersStrategy RealTimeTemporalLayersStrategy
+#endif
+TEST_F(TestVideoSenderWithVp8, MAYBE_RealTimeTemporalLayersStrategy) {
   Config extra_options;
   extra_options.Set<TemporalLayers::Factory>(
       new RealTimeTemporalLayersFactory());

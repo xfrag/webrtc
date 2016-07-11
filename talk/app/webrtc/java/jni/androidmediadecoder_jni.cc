@@ -95,6 +95,8 @@ class MediaCodecVideoDecoder : public webrtc::VideoDecoder,
   // rtc::MessageHandler implementation.
   void OnMessage(rtc::Message* msg) override;
 
+  const char* ImplementationName() const override;
+
  private:
   // CHECK-fail if not running on |codec_thread_|.
   void CheckOnCodecThread();
@@ -109,6 +111,10 @@ class MediaCodecVideoDecoder : public webrtc::VideoDecoder,
 
   // Type of video codec.
   VideoCodecType codecType_;
+
+  // Render EGL context - owned by factory, should not be allocated/destroyed
+  // by VideoDecoder.
+  jobject render_egl_context_;
 
   bool key_frame_required_;
   bool inited_;
@@ -163,10 +169,6 @@ class MediaCodecVideoDecoder : public webrtc::VideoDecoder,
 
   // Global references; must be deleted in Release().
   std::vector<jobject> input_buffers_;
-
-  // Render EGL context - owned by factory, should not be allocated/destroyed
-  // by VideoDecoder.
-  jobject render_egl_context_;
 };
 
 MediaCodecVideoDecoder::MediaCodecVideoDecoder(
@@ -318,9 +320,19 @@ int32_t MediaCodecVideoDecoder::InitDecodeOnCodecThread() {
   frames_received_ = 0;
   frames_decoded_ = 0;
 
+  jobject java_surface_texture_helper_ = nullptr;
   if (use_surface_) {
+    java_surface_texture_helper_ = jni->CallStaticObjectMethod(
+        FindClass(jni, "org/webrtc/SurfaceTextureHelper"),
+        GetStaticMethodID(jni,
+                          FindClass(jni, "org/webrtc/SurfaceTextureHelper"),
+                          "create",
+                          "(Lorg/webrtc/EglBase$Context;)"
+                          "Lorg/webrtc/SurfaceTextureHelper;"),
+        render_egl_context_);
+    RTC_CHECK(java_surface_texture_helper_ != nullptr);
     surface_texture_helper_ = new rtc::RefCountedObject<SurfaceTextureHelper>(
-        jni, render_egl_context_);
+        jni, java_surface_texture_helper_);
   }
 
   jobject j_video_codec_enum = JavaEnumFromIndex(
@@ -331,8 +343,7 @@ int32_t MediaCodecVideoDecoder::InitDecodeOnCodecThread() {
       j_video_codec_enum,
       codec_.width,
       codec_.height,
-      use_surface_ ? surface_texture_helper_->GetJavaSurfaceTextureHelper()
-                   : nullptr);
+      java_surface_texture_helper_);
   if (CheckException(jni) || !success) {
     ALOGE << "Codec initialization error - fallback to SW codec.";
     sw_fallback_required_ = true;
@@ -895,6 +906,10 @@ void MediaCodecVideoDecoderFactory::DestroyVideoDecoder(
     webrtc::VideoDecoder* decoder) {
   ALOGD << "Destroy video decoder.";
   delete decoder;
+}
+
+const char* MediaCodecVideoDecoder::ImplementationName() const {
+  return "MediaCodec";
 }
 
 }  // namespace webrtc_jni

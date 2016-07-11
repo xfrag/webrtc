@@ -25,7 +25,7 @@ class AudioEncoderPcm : public AudioEncoder {
     bool IsOk() const;
 
     int frame_size_ms;
-    int num_channels;
+    size_t num_channels;
     int payload_type;
 
    protected:
@@ -37,7 +37,7 @@ class AudioEncoderPcm : public AudioEncoder {
 
   size_t MaxEncodedBytes() const override;
   int SampleRateHz() const override;
-  int NumChannels() const override;
+  size_t NumChannels() const override;
   size_t Num10MsFramesInNextPacket() const override;
   size_t Max10MsFramesInAPacket() const override;
   int GetTargetBitrate() const override;
@@ -54,11 +54,11 @@ class AudioEncoderPcm : public AudioEncoder {
                             size_t input_len,
                             uint8_t* encoded) = 0;
 
-  virtual int BytesPerSample() const = 0;
+  virtual size_t BytesPerSample() const = 0;
 
  private:
   const int sample_rate_hz_;
-  const int num_channels_;
+  const size_t num_channels_;
   const int payload_type_;
   const size_t num_10ms_frames_per_packet_;
   const size_t full_frame_samples_;
@@ -83,7 +83,7 @@ class AudioEncoderPcmA final : public AudioEncoderPcm {
                     size_t input_len,
                     uint8_t* encoded) override;
 
-  int BytesPerSample() const override;
+  size_t BytesPerSample() const override;
 
  private:
   static const int kSampleRateHz = 8000;
@@ -105,7 +105,7 @@ class AudioEncoderPcmU final : public AudioEncoderPcm {
                     size_t input_len,
                     uint8_t* encoded) override;
 
-  int BytesPerSample() const override;
+  size_t BytesPerSample() const override;
 
  private:
   static const int kSampleRateHz = 8000;

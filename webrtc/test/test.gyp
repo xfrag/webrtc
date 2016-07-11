@@ -59,9 +59,11 @@
       ],  # conditions.
     },
     {
-      'target_name': 'frame_generator',
+      'target_name': 'fake_video_frames',
       'type': 'static_library',
       'sources': [
+        'fake_texture_frame.cc',
+        'fake_texture_frame.h',
         'frame_generator.cc',
         'frame_generator.h',
       ],
@@ -95,6 +97,7 @@
       ],
       'dependencies': [
         '<(webrtc_root)/common.gyp:webrtc_common',
+        '<(webrtc_root)/system_wrappers/system_wrappers.gyp:field_trial_default',
         '<(webrtc_root)/system_wrappers/system_wrappers.gyp:system_wrappers',
       ],
     },
@@ -140,7 +143,6 @@
         'testsupport/frame_reader.h',
         'testsupport/frame_writer.cc',
         'testsupport/frame_writer.h',
-        'testsupport/gtest_disable.h',
         'testsupport/iosfileutils.mm',
         'testsupport/mock/mock_frame_reader.h',
         'testsupport/mock/mock_frame_writer.h',

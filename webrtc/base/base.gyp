@@ -152,6 +152,9 @@
         '<(webrtc_root)/common.gyp:webrtc_common',
         'rtc_base_approved',
       ],
+      'export_dependent_settings': [
+        'rtc_base_approved',
+      ],
       'defines': [
         'FEATURE_ENABLE_SSL',
         'SSL_USE_OPENSSL',
@@ -181,7 +184,6 @@
         'bandwidthsmoother.h',
         'base64.cc',
         'base64.h',
-        'basicdefs.h',
         'bind.h',
         'callback.h',
         'common.cc',
@@ -222,6 +224,9 @@
         'httpserver.h',
         'ifaddrs-android.cc',
         'ifaddrs-android.h',
+        'ifaddrs_converter.cc',
+        'ifaddrs_converter.h',
+        'macifaddrs_converter.cc',
         'iosfilesystem.mm',
         'ipaddress.cc',
         'ipaddress.h',
@@ -660,6 +665,9 @@
           ],
         }],
         ['OS=="win"', {
+          'sources!': [
+            'ifaddrs_converter.cc',
+          ],
           'link_settings': {
             'libraries': [
               '-lcrypt32.lib',
@@ -711,6 +719,7 @@
         }],
         ['OS!="ios" and OS!="mac"', {
           'sources!': [
+            'macifaddrs_converter.cc',
             'scoped_autorelease_pool.mm',
           ],
         }],

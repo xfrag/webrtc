@@ -66,7 +66,7 @@ int32_t RTPSenderAudio::RegisterAudioPayload(
     const char payloadName[RTP_PAYLOAD_NAME_SIZE],
     const int8_t payloadType,
     const uint32_t frequency,
-    const uint8_t channels,
+    const size_t channels,
     const uint32_t rate,
     RtpUtility::Payload** payload) {
   if (RtpUtility::StringCompare(payloadName, "cn", 2)) {
@@ -350,7 +350,7 @@ int32_t RTPSenderAudio::SendAudio(FrameType frameType,
   size_t packetSize = payloadSize + rtpHeaderLength;
   RtpUtility::RtpHeaderParser rtp_parser(dataBuffer, packetSize);
   RTPHeader rtp_header;
-  rtp_parser.Parse(rtp_header);
+  rtp_parser.Parse(&rtp_header);
   _rtpSender->UpdateAudioLevel(dataBuffer, packetSize, rtp_header,
                                (frameType == kAudioFrameSpeech),
                                audio_level_dbov);

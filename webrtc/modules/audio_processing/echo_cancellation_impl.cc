@@ -99,8 +99,8 @@ int EchoCancellationImpl::ProcessRenderAudio(const AudioBuffer* audio) {
   // The ordering convention must be followed to pass to the correct AEC.
   size_t handle_index = 0;
   render_queue_buffer_.clear();
-  for (int i = 0; i < apm_->num_output_channels(); i++) {
-    for (int j = 0; j < audio->num_channels(); j++) {
+  for (size_t i = 0; i < apm_->num_output_channels(); i++) {
+    for (size_t j = 0; j < audio->num_channels(); j++) {
       Handle* my_handle = static_cast<Handle*>(handle(handle_index));
       // Retrieve any error code produced by the buffering of the farend
       // signal
@@ -142,12 +142,12 @@ void EchoCancellationImpl::ReadQueuedRenderData() {
 
   while (render_signal_queue_->Remove(&capture_queue_buffer_)) {
     size_t handle_index = 0;
-    int buffer_index = 0;
-    const int num_frames_per_band =
+    size_t buffer_index = 0;
+    const size_t num_frames_per_band =
         capture_queue_buffer_.size() /
         (apm_->num_output_channels() * apm_->num_reverse_channels());
-    for (int i = 0; i < apm_->num_output_channels(); i++) {
-      for (int j = 0; j < apm_->num_reverse_channels(); j++) {
+    for (size_t i = 0; i < apm_->num_output_channels(); i++) {
+      for (size_t j = 0; j < apm_->num_reverse_channels(); j++) {
         Handle* my_handle = static_cast<Handle*>(handle(handle_index));
         WebRtcAec_BufferFarend(my_handle, &capture_queue_buffer_[buffer_index],
                                num_frames_per_band);
@@ -174,15 +174,15 @@ int EchoCancellationImpl::ProcessCaptureAudio(AudioBuffer* audio) {
   }
 
   assert(audio->num_frames_per_band() <= 160);
-  assert(audio->num_channels() == apm_->num_output_channels());
+  assert(audio->num_channels() == apm_->num_proc_channels());
 
   int err = AudioProcessing::kNoError;
 
   // The ordering convention must be followed to pass to the correct AEC.
   size_t handle_index = 0;
   stream_has_echo_ = false;
-  for (int i = 0; i < audio->num_channels(); i++) {
-    for (int j = 0; j < apm_->num_reverse_channels(); j++) {
+  for (size_t i = 0; i < audio->num_channels(); i++) {
+    for (size_t j = 0; j < apm_->num_reverse_channels(); j++) {
       Handle* my_handle = handle(handle_index);
       err = WebRtcAec_Process(my_handle, audio->split_bands_const_f(i),
                               audio->num_bands(), audio->split_bands_f(i),
@@ -489,10 +489,9 @@ int EchoCancellationImpl::ConfigureHandle(void* handle) const {
   return WebRtcAec_set_config(static_cast<Handle*>(handle), config);
 }
 
-int EchoCancellationImpl::num_handles_required() const {
+size_t EchoCancellationImpl::num_handles_required() const {
   // Not locked as it only relies on APM public API which is threadsafe.
-  return apm_->num_output_channels() *
-         apm_->num_reverse_channels();
+  return apm_->num_output_channels() * apm_->num_reverse_channels();
 }
 
 int EchoCancellationImpl::GetHandleError(void* handle) const {

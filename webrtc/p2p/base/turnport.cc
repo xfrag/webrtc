@@ -351,6 +351,8 @@ bool TurnPort::CreateTurnClientSocket() {
 
   socket_->SignalReadyToSend.connect(this, &TurnPort::OnReadyToSend);
 
+  socket_->SignalSentPacket.connect(this, &TurnPort::OnSentPacket);
+
   // TCP port is ready to send stun requests after the socket is connected,
   // while UDP port is ready to do so once the socket is created.
   if (server_address_.proto == PROTO_TCP) {
@@ -409,11 +411,7 @@ void TurnPort::OnSocketConnect(rtc::AsyncPacketSocket* socket) {
 void TurnPort::OnSocketClose(rtc::AsyncPacketSocket* socket, int error) {
   LOG_J(LS_WARNING, this) << "Connection with server failed, error=" << error;
   ASSERT(socket == socket_);
-  if (!ready()) {
-    OnAllocateError();
-  }
-  request_manager_.Clear();
-  state_ = STATE_DISCONNECTED;
+  Close();
 }
 
 void TurnPort::OnAllocateMismatch() {
@@ -586,6 +584,11 @@ void TurnPort::OnReadPacket(
   }
 }
 
+void TurnPort::OnSentPacket(rtc::AsyncPacketSocket* socket,
+                            const rtc::SentPacket& sent_packet) {
+  PortInterface::SignalSentPacket(sent_packet);
+}
+
 void TurnPort::OnReadyToSend(rtc::AsyncPacketSocket* socket) {
   if (ready()) {
     Port::OnReadyToSend();
@@ -717,7 +720,18 @@ void TurnPort::OnAllocateError() {
   thread()->Post(this, MSG_ALLOCATE_ERROR);
 }
 
+void TurnPort::OnTurnRefreshError() {
+  // Need to Close the port asynchronously because otherwise, the refresh
+  // request may be deleted twice: once at the end of the message processing
+  // and the other in Close().
+  thread()->Post(this, MSG_REFRESH_ERROR);
+}
+
 void TurnPort::Close() {
+  if (!ready()) {
+    OnAllocateError();
+  }
+  request_manager_.Clear();
   // Stop the port from creating new connections.
   state_ = STATE_DISCONNECTED;
   // Delete all existing connections; stop sending data.
@@ -733,6 +747,9 @@ void TurnPort::OnMessage(rtc::Message* message) {
       break;
     case MSG_ALLOCATE_MISMATCH:
       OnAllocateMismatch();
+      break;
+    case MSG_REFRESH_ERROR:
+      Close();
       break;
     case MSG_TRY_ALTERNATE_SERVER:
       if (server_address().proto == PROTO_UDP) {

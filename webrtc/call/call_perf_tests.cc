@@ -284,7 +284,7 @@ void CallPerfTest::TestAudioVideoSync(bool fec, bool create_audio_first) {
 
   test::FakeDecoder fake_decoder;
 
-  CreateSendConfig(1, &sync_send_transport);
+  CreateSendConfig(1, 0, &sync_send_transport);
   CreateMatchingReceiveConfigs(&sync_receive_transport);
 
   AudioSendStream::Config audio_send_config(&audio_send_transport);
@@ -296,16 +296,16 @@ void CallPerfTest::TestAudioVideoSync(bool fec, bool create_audio_first) {
   CodecInst isac = {103, "ISAC", 16000, 480, 1, 32000};
   EXPECT_EQ(0, voe_codec->SetSendCodec(send_channel_id, isac));
 
-  send_config_.rtp.nack.rtp_history_ms = kNackRtpHistoryMs;
+  video_send_config_.rtp.nack.rtp_history_ms = kNackRtpHistoryMs;
   if (fec) {
-    send_config_.rtp.fec.red_payload_type = kRedPayloadType;
-    send_config_.rtp.fec.ulpfec_payload_type = kUlpfecPayloadType;
-    receive_configs_[0].rtp.fec.red_payload_type = kRedPayloadType;
-    receive_configs_[0].rtp.fec.ulpfec_payload_type = kUlpfecPayloadType;
+    video_send_config_.rtp.fec.red_payload_type = kRedPayloadType;
+    video_send_config_.rtp.fec.ulpfec_payload_type = kUlpfecPayloadType;
+    video_receive_configs_[0].rtp.fec.red_payload_type = kRedPayloadType;
+    video_receive_configs_[0].rtp.fec.ulpfec_payload_type = kUlpfecPayloadType;
   }
-  receive_configs_[0].rtp.nack.rtp_history_ms = 1000;
-  receive_configs_[0].renderer = &observer;
-  receive_configs_[0].sync_group = kSyncGroup;
+  video_receive_configs_[0].rtp.nack.rtp_history_ms = 1000;
+  video_receive_configs_[0].renderer = &observer;
+  video_receive_configs_[0].sync_group = kSyncGroup;
 
   AudioReceiveStream::Config audio_recv_config;
   audio_recv_config.rtp.remote_ssrc = kAudioSendSsrc;
@@ -318,9 +318,9 @@ void CallPerfTest::TestAudioVideoSync(bool fec, bool create_audio_first) {
   if (create_audio_first) {
     audio_receive_stream =
         receiver_call_->CreateAudioReceiveStream(audio_recv_config);
-    CreateStreams();
+    CreateVideoStreams();
   } else {
-    CreateStreams();
+    CreateVideoStreams();
     audio_receive_stream =
         receiver_call_->CreateAudioReceiveStream(audio_recv_config);
   }
@@ -384,8 +384,12 @@ void CallPerfTest::TestCaptureNtpTime(const FakeNetworkPipe::Config& net_config,
   class CaptureNtpTimeObserver : public test::EndToEndTest,
                                  public VideoRenderer {
    public:
-    CaptureNtpTimeObserver(int threshold_ms, int start_time_ms, int run_time_ms)
+    CaptureNtpTimeObserver(const FakeNetworkPipe::Config& net_config,
+                           int threshold_ms,
+                           int start_time_ms,
+                           int run_time_ms)
         : EndToEndTest(kLongTimeoutMs),
+          net_config_(net_config),
           clock_(Clock::GetRealTimeClock()),
           threshold_ms_(threshold_ms),
           start_time_ms_(start_time_ms),
@@ -396,6 +400,16 @@ void CallPerfTest::TestCaptureNtpTime(const FakeNetworkPipe::Config& net_config,
           rtp_start_timestamp_(0) {}
 
    private:
+    test::PacketTransport* CreateSendTransport(Call* sender_call) override {
+      return new test::PacketTransport(
+          sender_call, this, test::PacketTransport::kSender, net_config_);
+    }
+
+    test::PacketTransport* CreateReceiveTransport() override {
+      return new test::PacketTransport(
+          nullptr, this, test::PacketTransport::kReceiver, net_config_);
+    }
+
     void RenderFrame(const VideoFrame& video_frame,
                      int time_to_render_ms) override {
       rtc::CritScope lock(&crit_);
@@ -464,9 +478,10 @@ void CallPerfTest::TestCaptureNtpTime(const FakeNetworkPipe::Config& net_config,
       capturer_ = frame_generator_capturer;
     }
 
-    void ModifyConfigs(VideoSendStream::Config* send_config,
-                       std::vector<VideoReceiveStream::Config>* receive_configs,
-                       VideoEncoderConfig* encoder_config) override {
+    void ModifyVideoConfigs(
+        VideoSendStream::Config* send_config,
+        std::vector<VideoReceiveStream::Config>* receive_configs,
+        VideoEncoderConfig* encoder_config) override {
       (*receive_configs)[0].renderer = this;
       // Enable the receiver side rtt calculation.
       (*receive_configs)[0].rtp.rtcp_xr.receiver_reference_time_report = true;
@@ -479,6 +494,7 @@ void CallPerfTest::TestCaptureNtpTime(const FakeNetworkPipe::Config& net_config,
     }
 
     rtc::CriticalSection crit_;
+    const FakeNetworkPipe::Config net_config_;
     Clock* const clock_;
     int threshold_ms_;
     int start_time_ms_;
@@ -489,9 +505,9 @@ void CallPerfTest::TestCaptureNtpTime(const FakeNetworkPipe::Config& net_config,
     uint32_t rtp_start_timestamp_;
     typedef std::map<uint32_t, uint32_t> FrameCaptureTimeList;
     FrameCaptureTimeList capture_time_list_ GUARDED_BY(&crit_);
-  } test(threshold_ms, start_time_ms, run_time_ms);
+  } test(net_config, threshold_ms, start_time_ms, run_time_ms);
 
-  RunBaseTest(&test, net_config);
+  RunBaseTest(&test);
 }
 
 TEST_F(CallPerfTest, CaptureNtpTimeWithNetworkDelay) {
@@ -531,9 +547,10 @@ void CallPerfTest::TestCpuOveruse(LoadObserver::Load tested_load,
         observation_complete_.Set();
     }
 
-    void ModifyConfigs(VideoSendStream::Config* send_config,
-                       std::vector<VideoReceiveStream::Config>* receive_configs,
-                       VideoEncoderConfig* encoder_config) override {
+    void ModifyVideoConfigs(
+        VideoSendStream::Config* send_config,
+        std::vector<VideoReceiveStream::Config>* receive_configs,
+        VideoEncoderConfig* encoder_config) override {
       send_config->overuse_callback = this;
       send_config->encoder_settings.encoder = &encoder_;
     }
@@ -546,7 +563,7 @@ void CallPerfTest::TestCpuOveruse(LoadObserver::Load tested_load,
     test::DelayedEncoder encoder_;
   } test(tested_load, encode_delay_ms);
 
-  RunBaseTest(&test, FakeNetworkPipe::Config());
+  RunBaseTest(&test);
 }
 
 TEST_F(CallPerfTest, ReceivesCpuUnderuse) {
@@ -613,15 +630,16 @@ void CallPerfTest::TestMinTransmitBitrate(bool pad_to_min_bitrate) {
       return SEND_PACKET;
     }
 
-    void OnStreamsCreated(
+    void OnVideoStreamsCreated(
         VideoSendStream* send_stream,
         const std::vector<VideoReceiveStream*>& receive_streams) override {
       send_stream_ = send_stream;
     }
 
-    void ModifyConfigs(VideoSendStream::Config* send_config,
-                       std::vector<VideoReceiveStream::Config>* receive_configs,
-                       VideoEncoderConfig* encoder_config) override {
+    void ModifyVideoConfigs(
+        VideoSendStream::Config* send_config,
+        std::vector<VideoReceiveStream::Config>* receive_configs,
+        VideoEncoderConfig* encoder_config) override {
       if (pad_to_min_bitrate_) {
         encoder_config->min_transmit_bitrate_bps = kMinTransmitBitrateBps;
       } else {
@@ -639,7 +657,7 @@ void CallPerfTest::TestMinTransmitBitrate(bool pad_to_min_bitrate) {
   } test(pad_to_min_bitrate);
 
   fake_encoder_.SetMaxBitrate(kMaxEncodeBitrateKbps);
-  RunBaseTest(&test, FakeNetworkPipe::Config());
+  RunBaseTest(&test);
 }
 
 TEST_F(CallPerfTest, PadsToMinTransmitBitrate) { TestMinTransmitBitrate(true); }
@@ -698,9 +716,10 @@ TEST_F(CallPerfTest, KeepsHighBitrateWhenReconfiguringSender) {
       return config;
     }
 
-    void ModifyConfigs(VideoSendStream::Config* send_config,
-                       std::vector<VideoReceiveStream::Config>* receive_configs,
-                       VideoEncoderConfig* encoder_config) override {
+    void ModifyVideoConfigs(
+        VideoSendStream::Config* send_config,
+        std::vector<VideoReceiveStream::Config>* receive_configs,
+        VideoEncoderConfig* encoder_config) override {
       send_config->encoder_settings.encoder = this;
       encoder_config->streams[0].min_bitrate_bps = 50000;
       encoder_config->streams[0].target_bitrate_bps =
@@ -709,7 +728,7 @@ TEST_F(CallPerfTest, KeepsHighBitrateWhenReconfiguringSender) {
       encoder_config_ = *encoder_config;
     }
 
-    void OnStreamsCreated(
+    void OnVideoStreamsCreated(
         VideoSendStream* send_stream,
         const std::vector<VideoReceiveStream*>& receive_streams) override {
       send_stream_ = send_stream;
@@ -734,7 +753,7 @@ TEST_F(CallPerfTest, KeepsHighBitrateWhenReconfiguringSender) {
     VideoEncoderConfig encoder_config_;
   } test;
 
-  RunBaseTest(&test, FakeNetworkPipe::Config());
+  RunBaseTest(&test);
 }
 
 }  // namespace webrtc
