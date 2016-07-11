@@ -14,13 +14,13 @@
 namespace webrtc {
 
 const int kRecordingFixedSampleRate = 48000;
-const int kRecordingNumChannels = 2;
+const size_t kRecordingNumChannels = 2;
 const int kPlayoutFixedSampleRate = 48000;
-const int kPlayoutNumChannels = 2;
-const int kPlayoutBufferSize = kPlayoutFixedSampleRate / 100
-                               * kPlayoutNumChannels * 2;
-const int kRecordingBufferSize = kRecordingFixedSampleRate / 100
-                                 * kRecordingNumChannels * 2;
+const size_t kPlayoutNumChannels = 2;
+const size_t kPlayoutBufferSize =
+    kPlayoutFixedSampleRate / 100 * kPlayoutNumChannels * 2;
+const size_t kRecordingBufferSize =
+    kRecordingFixedSampleRate / 100 * kRecordingNumChannels * 2;
 
 FileAudioDevice::FileAudioDevice(const int32_t id,
                                  const char* inputFilename,
@@ -194,9 +194,7 @@ int32_t FileAudioDevice::StartPlayout() {
   _playoutFramesLeft = 0;
 
   if (!_playoutBuffer) {
-      _playoutBuffer = new int8_t[2 *
-                                  kPlayoutNumChannels *
-                                  kPlayoutFixedSampleRate/100];
+      _playoutBuffer = new int8_t[kPlayoutBufferSize];
   }
   if (!_playoutBuffer) {
     _playing = false;
@@ -500,7 +498,12 @@ bool FileAudioDevice::PlayThreadProcess()
     }
     _playoutFramesLeft = 0;
     _critSect.Leave();
-    SleepMs(10 - (_clock->CurrentNtpInMilliseconds() - currentTime));
+
+    uint64_t deltaTimeMillis = _clock->CurrentNtpInMilliseconds() - currentTime;
+    if(deltaTimeMillis < 10) {
+      SleepMs(10 - deltaTimeMillis);
+    }
+
     return true;
 }
 
@@ -530,7 +533,12 @@ bool FileAudioDevice::RecThreadProcess()
     }
 
     _critSect.Leave();
-    SleepMs(10 - (_clock->CurrentNtpInMilliseconds() - currentTime));
+
+    uint64_t deltaTimeMillis = _clock->CurrentNtpInMilliseconds() - currentTime;
+    if(deltaTimeMillis < 10) {
+      SleepMs(10 - deltaTimeMillis);
+    }
+
     return true;
 }
 

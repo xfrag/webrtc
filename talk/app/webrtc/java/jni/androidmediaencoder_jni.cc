@@ -109,6 +109,11 @@ class MediaCodecVideoEncoder : public webrtc::VideoEncoder,
   int GetTargetFramerate() override;
 
   bool SupportsNativeHandle() const override { return true; }
+  const char* ImplementationName() const override;
+
+ private:
+  // CHECK-fail if not running on |codec_thread_|.
+  void CheckOnCodecThread();
 
  private:
   // ResetCodecOnCodecThread() calls ReleaseOnCodecThread() and
@@ -245,9 +250,6 @@ MediaCodecVideoEncoder::MediaCodecVideoEncoder(
     JNIEnv* jni, VideoCodecType codecType, jobject egl_context) :
     codecType_(codecType),
     callback_(NULL),
-    inited_(false),
-    use_surface_(false),
-    picture_id_(0),
     codec_thread_(new Thread()),
     j_media_codec_video_encoder_class_(
         jni,
@@ -259,6 +261,9 @@ MediaCodecVideoEncoder::MediaCodecVideoEncoder(
                                    *j_media_codec_video_encoder_class_,
                                    "<init>",
                                    "()V"))),
+    inited_(false),
+    use_surface_(false),
+    picture_id_(0),
     egl_context_(egl_context) {
   ScopedLocalRefFrame local_ref_frame(jni);
   // It would be nice to avoid spinning up a new thread per MediaCodec, and
@@ -278,7 +283,7 @@ MediaCodecVideoEncoder::MediaCodecVideoEncoder(
       *j_media_codec_video_encoder_class_,
       "initEncode",
       "(Lorg/webrtc/MediaCodecVideoEncoder$VideoCodecType;"
-      "IIIILorg/webrtc/EglBase$Context;)Z");
+      "IIIILorg/webrtc/EglBase14$Context;)Z");
   j_get_input_buffers_method_ = GetMethodID(
       jni,
       *j_media_codec_video_encoder_class_,
@@ -1068,8 +1073,12 @@ int MediaCodecVideoEncoder::GetTargetFramerate() {
   return scale_ ? quality_scaler_.GetTargetFramerate() : -1;
 }
 
+const char* MediaCodecVideoEncoder::ImplementationName() const {
+  return "MediaCodec";
+}
+
 MediaCodecVideoEncoderFactory::MediaCodecVideoEncoderFactory()
-  : egl_context_ (nullptr) {
+    : egl_context_(nullptr) {
   JNIEnv* jni = AttachCurrentThreadIfNeeded();
   ScopedLocalRefFrame local_ref_frame(jni);
   jclass j_encoder_class = FindClass(jni, "org/webrtc/MediaCodecVideoEncoder");
@@ -1122,7 +1131,7 @@ void MediaCodecVideoEncoderFactory::SetEGLContext(
       egl_context_ = NULL;
     } else {
       jclass j_egl_context_class =
-          FindClass(jni, "org/webrtc/EglBase$Context");
+          FindClass(jni, "org/webrtc/EglBase14$Context");
       if (!jni->IsInstanceOf(egl_context_, j_egl_context_class)) {
         ALOGE << "Wrong EGL Context.";
         jni->DeleteGlobalRef(egl_context_);

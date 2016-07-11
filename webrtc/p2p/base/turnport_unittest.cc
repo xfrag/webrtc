@@ -309,7 +309,7 @@ class TurnPortTest : public testing::Test,
   }
 
   bool CheckConnectionDestroyed() {
-    turn_port_->FlushRequests();
+    turn_port_->FlushRequests(cricket::kAllRequests);
     rtc::Thread::Current()->ProcessMessages(50);
     return connection_destroyed_;
   }
@@ -693,8 +693,9 @@ TEST_F(TurnPortTest, TestTurnTcpAllocateMismatch) {
 
 TEST_F(TurnPortTest, TestRefreshRequestGetsErrorResponse) {
   CreateTurnPort(kTurnUsername, kTurnPassword, kTurnUdpProtoAddr);
-  turn_port_->PrepareAddress();
-  EXPECT_TRUE_WAIT(turn_ready_, kTimeout);
+  PrepareTurnAndUdpPorts();
+  turn_port_->CreateConnection(udp_port_->Candidates()[0],
+                               Port::ORIGIN_MESSAGE);
   // Set bad credentials.
   cricket::RelayCredentials bad_credentials("bad_user", "bad_pwd");
   turn_port_->set_credentials(bad_credentials);
@@ -702,13 +703,14 @@ TEST_F(TurnPortTest, TestRefreshRequestGetsErrorResponse) {
   // This sends out the first RefreshRequest with correct credentials.
   // When this succeeds, it will schedule a new RefreshRequest with the bad
   // credential.
-  turn_port_->FlushRequests();
+  turn_port_->FlushRequests(cricket::TURN_REFRESH_REQUEST);
   EXPECT_TRUE_WAIT(turn_refresh_success_, kTimeout);
   // Flush it again, it will receive a bad response.
-  turn_port_->FlushRequests();
+  turn_port_->FlushRequests(cricket::TURN_REFRESH_REQUEST);
   EXPECT_TRUE_WAIT(!turn_refresh_success_, kTimeout);
-  EXPECT_TRUE(turn_port_->connections().empty());
-  EXPECT_FALSE(turn_port_->connected());
+  EXPECT_TRUE_WAIT(!turn_port_->connected(), kTimeout);
+  EXPECT_TRUE_WAIT(turn_port_->connections().empty(), kTimeout);
+  EXPECT_FALSE(turn_port_->HasRequests());
 }
 
 // Test that CreateConnection will return null if port becomes disconnected.
@@ -840,10 +842,10 @@ TEST_F(TurnPortTest, TestRefreshCreatePermissionRequest) {
   // another request with bad_ufrag and bad_pwd.
   cricket::RelayCredentials bad_credentials("bad_user", "bad_pwd");
   turn_port_->set_credentials(bad_credentials);
-  turn_port_->FlushRequests();
+  turn_port_->FlushRequests(cricket::kAllRequests);
   ASSERT_TRUE_WAIT(turn_create_permission_success_, kTimeout);
   // Flush the requests again; the create-permission-request will fail.
-  turn_port_->FlushRequests();
+  turn_port_->FlushRequests(cricket::kAllRequests);
   EXPECT_TRUE_WAIT(!turn_create_permission_success_, kTimeout);
   EXPECT_TRUE_WAIT(connection_destroyed_, kTimeout);
 }
@@ -975,6 +977,10 @@ TEST_F(TurnPortTest, DISABLED_TestTurnTCPReleaseAllocation) {
 // This test verifies any FD's are not leaked after TurnPort is destroyed.
 // https://code.google.com/p/webrtc/issues/detail?id=2651
 #if defined(WEBRTC_LINUX) && !defined(WEBRTC_ANDROID)
+// 1 second is not always enough for getaddrinfo().
+// See: https://bugs.chromium.org/p/webrtc/issues/detail?id=5191
+static const unsigned int kResolverTimeout = 10000;
+
 TEST_F(TurnPortTest, TestResolverShutdown) {
   turn_server_.AddInternalSocket(kTurnUdpIPv6IntAddr, cricket::PROTO_UDP);
   int last_fd_count = GetFDCount();
@@ -983,7 +989,7 @@ TEST_F(TurnPortTest, TestResolverShutdown) {
                  cricket::ProtocolAddress(rtc::SocketAddress(
                     "www.google.invalid", 3478), cricket::PROTO_UDP));
   turn_port_->PrepareAddress();
-  ASSERT_TRUE_WAIT(turn_error_, kTimeout);
+  ASSERT_TRUE_WAIT(turn_error_, kResolverTimeout);
   EXPECT_TRUE(turn_port_->Candidates().empty());
   turn_port_.reset();
   rtc::Thread::Current()->Post(this, MSG_TESTFINISH);

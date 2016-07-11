@@ -190,7 +190,7 @@ class ViEChannel : public VCMFrameTypeCallback,
   int32_t OnInitializeDecoder(const int8_t payload_type,
                               const char payload_name[RTP_PAYLOAD_NAME_SIZE],
                               const int frequency,
-                              const uint8_t channels,
+                              const size_t channels,
                               const uint32_t rate) override;
   void OnIncomingSSRCChanged(const uint32_t ssrc) override;
   void OnIncomingCSRCChanged(const uint32_t CSRC, const bool added) override;
@@ -230,6 +230,7 @@ class ViEChannel : public VCMFrameTypeCallback,
 
   // Implements VCMReceiveCallback.
   void OnIncomingPayloadType(int payload_type) override;
+  void OnDecoderImplementationName(const char* implementation_name) override;
 
   // Implements VCMReceiveStatisticsCallback.
   void OnReceiveRatesUpdated(uint32_t bit_rate, uint32_t frame_rate) override;

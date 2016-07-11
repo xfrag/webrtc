@@ -202,6 +202,10 @@ class AudioDeviceModuleImpl : public AudioDeviceModule {
 #endif
   AudioDeviceBuffer* GetAudioDeviceBuffer() { return &_audioDeviceBuffer; }
 
+ protected:
+  // Allow extending classes to setup a custom audio device implementation.
+  void SetAudioDevice(AudioDeviceGeneric* device) { _ptrAudioDevice = device; }
+
  private:
   PlatformType Platform() const;
   AudioLayer PlatformAudioLayer() const;

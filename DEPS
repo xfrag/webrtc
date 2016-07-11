@@ -6,7 +6,7 @@
 vars = {
   'extra_gyp_flag': '-Dextra_gyp_flag=0',
   'chromium_git': 'https://chromium.googlesource.com',
-  'chromium_revision': 'ddfc1fe7e2643072e6b2745b80be38b4dd02a015',
+  'chromium_revision': '099be58b08dadb64b1dc9f359ae097e978df5416',
 }
 
 # NOTE: Prefer revision numbers to tags for svn deps. Use http rather than
@@ -102,6 +102,7 @@ hooks = [
                '--recursive',
                '--num_threads=10',
                '--no_auth',
+               '--quiet',
                '--bucket', 'chromium-webrtc-resources',
                'src/resources'],
   },

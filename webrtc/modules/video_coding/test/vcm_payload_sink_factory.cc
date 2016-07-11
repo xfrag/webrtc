@@ -22,9 +22,8 @@
 namespace webrtc {
 namespace rtpplayer {
 
-class VcmPayloadSinkFactory::VcmPayloadSink
-    : public PayloadSinkInterface,
-      public VCMPacketRequestCallback {
+class VcmPayloadSinkFactory::VcmPayloadSink : public PayloadSinkInterface,
+                                              public VCMPacketRequestCallback {
  public:
   VcmPayloadSink(VcmPayloadSinkFactory* factory,
                  RtpStreamInterface* stream,
@@ -43,9 +42,7 @@ class VcmPayloadSinkFactory::VcmPayloadSink
     vcm_->RegisterReceiveCallback(frame_receiver_.get());
   }
 
-  virtual ~VcmPayloadSink() {
-    factory_->Remove(this);
-  }
+  virtual ~VcmPayloadSink() { factory_->Remove(this); }
 
   // PayloadSinkInterface
   int32_t OnReceivedPayloadData(const uint8_t* payload_data,
@@ -136,14 +133,11 @@ PayloadSinkInterface* VcmPayloadSinkFactory::Create(
   }
 
   const PayloadTypes& plt = stream->payload_types();
-  for (PayloadTypesIterator it = plt.begin(); it != plt.end();
-      ++it) {
+  for (PayloadTypesIterator it = plt.begin(); it != plt.end(); ++it) {
     if (it->codec_type() != kVideoCodecULPFEC &&
         it->codec_type() != kVideoCodecRED) {
       VideoCodec codec;
-      if (VideoCodingModule::Codec(it->codec_type(), &codec) < 0) {
-        return NULL;
-      }
+      VideoCodingModule::Codec(it->codec_type(), &codec);
       codec.plType = it->payload_type();
       if (vcm->RegisterReceiveCodec(&codec, 1) < 0) {
         return NULL;

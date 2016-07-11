@@ -410,7 +410,7 @@ class WebRtcVoiceCodecs final {
   struct CodecPref {
     const char* name;
     int clockrate;
-    int channels;
+    size_t channels;
     int payload_type;
     bool is_multi_rate;
     int packet_sizes_ms[kMaxNumPacketSize];
@@ -493,7 +493,32 @@ WebRtcVoiceEngine::~WebRtcVoiceEngine() {
   RTC_DCHECK(worker_thread_checker_.CalledOnValidThread());
   LOG(LS_VERBOSE) << "WebRtcVoiceEngine::~WebRtcVoiceEngine";
   if (adm_) {
-    voe_wrapper_.reset();
+
+    // When the voe_wrapper_.reset() line below is executed, the VoiceEngine
+    // generates a warning as below:
+    // (webrtcvoiceengine.cc:961): webrtc: VoiceEngine::Delete did not release
+    //                          the very last reference.  1 references remain.
+
+    // The message originates from voice_engine_impl.cc, where
+    // VoiceEngine::Delete is defined. In all cases (with the reset() call &
+    // without it), the VoiceEngineImpl is being self-deleted. This means that
+    // the reference count reaches 0 in both cases, hence there is no memory
+    // leak.
+
+    // It turns out that the audio_state_ field also holds a reference to the
+    // VoiceEngine. See webrtc::AudioState and webrtc::internal::AudioState. When
+    // the reset function is called below, the ~VoEWrapper() destructor is called
+    // while the AudioState still holds a reference. This leads to the warning
+    // since the ~scoped_voe_engine() destructor for the engine_ field in
+    // VoEWrapper is called, thus triggering a premature call to
+    // VoiceEngine::Delete().
+
+    // If the above analysis is correct, then the same result (no warning
+    // message) must be achieved if audio_state_ gets set to NULL just before the
+    // reset() call on voe_wrapper_ (and indeed this is the case). So we can
+    // conclude that the voe_wrapper_.reset() line can be omitted. 
+
+//    voe_wrapper_.reset();
     adm_->Release();
     adm_ = NULL;
   }
@@ -530,6 +555,28 @@ bool WebRtcVoiceEngine::InitInternal() {
   if (voe_wrapper_->processing()->GetAgcConfig(default_agc_config_) == -1) {
     LOG_RTCERR0(GetAgcConfig);
     return false;
+  }
+
+  // Set default engine options.
+  {
+    AudioOptions options;
+    options.echo_cancellation = rtc::Optional<bool>(true);
+    options.auto_gain_control = rtc::Optional<bool>(true);
+    options.noise_suppression = rtc::Optional<bool>(true);
+    options.highpass_filter = rtc::Optional<bool>(true);
+    options.stereo_swapping = rtc::Optional<bool>(false);
+    options.audio_jitter_buffer_max_packets = rtc::Optional<int>(50);
+    options.audio_jitter_buffer_fast_accelerate = rtc::Optional<bool>(false);
+    options.typing_detection = rtc::Optional<bool>(true);
+    options.adjust_agc_delta = rtc::Optional<int>(0);
+    options.experimental_agc = rtc::Optional<bool>(false);
+    options.extended_filter_aec = rtc::Optional<bool>(false);
+    options.delay_agnostic_aec = rtc::Optional<bool>(false);
+    options.experimental_ns = rtc::Optional<bool>(false);
+    options.aec_dump = rtc::Optional<bool>(false);
+    if (!ApplyOptions(options)) {
+      return false;
+    }
   }
 
   // Print our codec list again for the call diagnostic log
@@ -569,26 +616,7 @@ VoiceMediaChannel* WebRtcVoiceEngine::CreateChannel(webrtc::Call* call,
 bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
   RTC_DCHECK(worker_thread_checker_.CalledOnValidThread());
   LOG(LS_INFO) << "ApplyOptions: " << options_in.ToString();
-
-  // Default engine options.
-  AudioOptions options;
-  options.echo_cancellation = rtc::Optional<bool>(true);
-  options.auto_gain_control = rtc::Optional<bool>(true);
-  options.noise_suppression = rtc::Optional<bool>(true);
-  options.highpass_filter = rtc::Optional<bool>(true);
-  options.stereo_swapping = rtc::Optional<bool>(false);
-  options.audio_jitter_buffer_max_packets = rtc::Optional<int>(50);
-  options.audio_jitter_buffer_fast_accelerate = rtc::Optional<bool>(false);
-  options.typing_detection = rtc::Optional<bool>(true);
-  options.adjust_agc_delta = rtc::Optional<int>(0);
-  options.experimental_agc = rtc::Optional<bool>(false);
-  options.extended_filter_aec = rtc::Optional<bool>(false);
-  options.delay_agnostic_aec = rtc::Optional<bool>(false);
-  options.experimental_ns = rtc::Optional<bool>(false);
-  options.aec_dump = rtc::Optional<bool>(false);
-
-  // Apply any given options on top.
-  options.SetAll(options_in);
+  AudioOptions options = options_in;  // The options are modified below.
 
   // kEcConference is AEC with high suppression.
   webrtc::EcModes ec_mode = webrtc::kEcConference;
@@ -1155,7 +1183,7 @@ class WebRtcVoiceMediaChannel::WebRtcAudioSendStream
   void OnData(const void* audio_data,
               int bits_per_sample,
               int sample_rate,
-              int number_of_channels,
+              size_t number_of_channels,
               size_t number_of_frames) override {
     RTC_DCHECK(!worker_thread_checker_.CalledOnValidThread());
     RTC_DCHECK(audio_capture_thread_checker_.CalledOnValidThread());

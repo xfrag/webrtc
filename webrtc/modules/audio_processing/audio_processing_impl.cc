@@ -214,21 +214,21 @@ AudioProcessingImpl::AudioProcessingImpl(const Config& config,
     : public_submodules_(new ApmPublicSubmodules()),
       private_submodules_(new ApmPrivateSubmodules(beamformer)),
       constants_(config.Get<ExperimentalAgc>().startup_min_volume,
-                 config.Get<Beamforming>().array_geometry,
-                 config.Get<Beamforming>().target_direction,
 #if defined(WEBRTC_ANDROID) || defined(WEBRTC_IOS)
                  false,
 #else
                  config.Get<ExperimentalAgc>().enabled,
 #endif
-                 config.Get<Intelligibility>().enabled,
-                 config.Get<Beamforming>().enabled),
+                 config.Get<Intelligibility>().enabled),
 
 #if defined(WEBRTC_ANDROID) || defined(WEBRTC_IOS)
-      capture_(false)
+      capture_(false,
 #else
-      capture_(config.Get<ExperimentalNs>().enabled)
+      capture_(config.Get<ExperimentalNs>().enabled,
 #endif
+               config.Get<Beamforming>().array_geometry,
+               config.Get<Beamforming>().target_direction),
+      capture_nonlocked_(config.Get<Beamforming>().enabled)
 {
   {
     rtc::CritScope cs_render(&crit_render_);
@@ -345,7 +345,7 @@ int AudioProcessingImpl::MaybeInitialize(
 
 int AudioProcessingImpl::InitializeLocked() {
   const int fwd_audio_buffer_channels =
-      constants_.beamformer_enabled
+      capture_nonlocked_.beamformer_enabled
           ? formats_.api_format.input_stream().num_channels()
           : formats_.api_format.output_stream().num_channels();
   const int rev_audio_buffer_out_num_frames =
@@ -410,16 +410,13 @@ int AudioProcessingImpl::InitializeLocked() {
 
 int AudioProcessingImpl::InitializeLocked(const ProcessingConfig& config) {
   for (const auto& stream : config.streams) {
-    if (stream.num_channels() < 0) {
-      return kBadNumberChannelsError;
-    }
     if (stream.num_channels() > 0 && stream.sample_rate_hz() <= 0) {
       return kBadSampleRateError;
     }
   }
 
-  const int num_in_channels = config.input_stream().num_channels();
-  const int num_out_channels = config.output_stream().num_channels();
+  const size_t num_in_channels = config.input_stream().num_channels();
+  const size_t num_out_channels = config.output_stream().num_channels();
 
   // Need at least one input channel.
   // Need either one output channel or as many outputs as there are inputs.
@@ -428,9 +425,8 @@ int AudioProcessingImpl::InitializeLocked(const ProcessingConfig& config) {
     return kBadNumberChannelsError;
   }
 
-  if (constants_.beamformer_enabled && (static_cast<size_t>(num_in_channels) !=
-                                            constants_.array_geometry.size() ||
-                                        num_out_channels > 1)) {
+  if (capture_nonlocked_.beamformer_enabled &&
+      num_in_channels != capture_.array_geometry.size()) {
     return kBadNumberChannelsError;
   }
 
@@ -498,6 +494,18 @@ void AudioProcessingImpl::SetExtraOptions(const Config& config) {
         config.Get<ExperimentalNs>().enabled;
     InitializeTransient();
   }
+
+#ifdef WEBRTC_ANDROID_PLATFORM_BUILD
+  if (capture_nonlocked_.beamformer_enabled !=
+          config.Get<Beamforming>().enabled) {
+    capture_nonlocked_.beamformer_enabled = config.Get<Beamforming>().enabled;
+    if (config.Get<Beamforming>().array_geometry.size() > 1) {
+      capture_.array_geometry = config.Get<Beamforming>().array_geometry;
+    }
+    capture_.target_direction = config.Get<Beamforming>().target_direction;
+    InitializeBeamformer();
+  }
+#endif  // WEBRTC_ANDROID_PLATFORM_BUILD
 }
 
 int AudioProcessingImpl::input_sample_rate_hz() const {
@@ -516,17 +524,22 @@ int AudioProcessingImpl::proc_split_sample_rate_hz() const {
   return capture_nonlocked_.split_rate;
 }
 
-int AudioProcessingImpl::num_reverse_channels() const {
+size_t AudioProcessingImpl::num_reverse_channels() const {
   // Used as callback from submodules, hence locking is not allowed.
   return formats_.rev_proc_format.num_channels();
 }
 
-int AudioProcessingImpl::num_input_channels() const {
+size_t AudioProcessingImpl::num_input_channels() const {
   // Used as callback from submodules, hence locking is not allowed.
   return formats_.api_format.input_stream().num_channels();
 }
 
-int AudioProcessingImpl::num_output_channels() const {
+size_t AudioProcessingImpl::num_proc_channels() const {
+  // Used as callback from submodules, hence locking is not allowed.
+  return capture_nonlocked_.beamformer_enabled ? 1 : num_output_channels();
+}
+
+size_t AudioProcessingImpl::num_output_channels() const {
   // Used as callback from submodules, hence locking is not allowed.
   return formats_.api_format.output_stream().num_channels();
 }
@@ -615,7 +628,8 @@ int AudioProcessingImpl::ProcessStream(const float* const* src,
     audioproc::Stream* msg = debug_dump_.capture.event_msg->mutable_stream();
     const size_t channel_size =
         sizeof(float) * formats_.api_format.input_stream().num_frames();
-    for (int i = 0; i < formats_.api_format.input_stream().num_channels(); ++i)
+    for (size_t i = 0; i < formats_.api_format.input_stream().num_channels();
+         ++i)
       msg->add_input_channel(src[i], channel_size);
   }
 #endif
@@ -629,7 +643,8 @@ int AudioProcessingImpl::ProcessStream(const float* const* src,
     audioproc::Stream* msg = debug_dump_.capture.event_msg->mutable_stream();
     const size_t channel_size =
         sizeof(float) * formats_.api_format.output_stream().num_frames();
-    for (int i = 0; i < formats_.api_format.output_stream().num_channels(); ++i)
+    for (size_t i = 0; i < formats_.api_format.output_stream().num_channels();
+         ++i)
       msg->add_output_channel(dest[i], channel_size);
     RETURN_ON_ERR(WriteMessageToDebugFile(debug_dump_.debug_file.get(),
                                           &crit_debug_, &debug_dump_.capture));
@@ -760,7 +775,7 @@ int AudioProcessingImpl::ProcessStreamLocked() {
         ca->num_channels());
   }
 
-  if (constants_.beamformer_enabled) {
+  if (capture_nonlocked_.beamformer_enabled) {
     private_submodules_->beamformer->ProcessChunk(*ca->split_data_f(),
                                                   ca->split_data_f());
     ca->set_num_channels(1);
@@ -782,7 +797,7 @@ int AudioProcessingImpl::ProcessStreamLocked() {
 
   if (constants_.use_new_agc &&
       public_submodules_->gain_control->is_enabled() &&
-      (!constants_.beamformer_enabled ||
+      (!capture_nonlocked_.beamformer_enabled ||
        private_submodules_->beamformer->is_target_present())) {
     private_submodules_->agc_manager->Process(
         ca->split_bands_const(0)[kBand0To8kHz], ca->num_frames_per_band(),
@@ -863,7 +878,7 @@ int AudioProcessingImpl::AnalyzeReverseStreamLocked(
     return kNullPointerError;
   }
 
-  if (reverse_input_config.num_channels() <= 0) {
+  if (reverse_input_config.num_channels() == 0) {
     return kBadNumberChannelsError;
   }
 
@@ -882,7 +897,7 @@ int AudioProcessingImpl::AnalyzeReverseStreamLocked(
         debug_dump_.render.event_msg->mutable_reverse_stream();
     const size_t channel_size =
         sizeof(float) * formats_.api_format.reverse_input_stream().num_frames();
-    for (int i = 0;
+    for (size_t i = 0;
          i < formats_.api_format.reverse_input_stream().num_channels(); ++i)
       msg->add_channel(src[i], channel_size);
     RETURN_ON_ERR(WriteMessageToDebugFile(debug_dump_.debug_file.get(),
@@ -1172,7 +1187,7 @@ VoiceDetection* AudioProcessingImpl::voice_detection() const {
 }
 
 bool AudioProcessingImpl::is_data_processed() const {
-  if (constants_.beamformer_enabled) {
+  if (capture_nonlocked_.beamformer_enabled) {
     return true;
   }
 
@@ -1282,15 +1297,15 @@ void AudioProcessingImpl::InitializeTransient() {
     public_submodules_->transient_suppressor->Initialize(
         capture_nonlocked_.fwd_proc_format.sample_rate_hz(),
         capture_nonlocked_.split_rate,
-        formats_.api_format.output_stream().num_channels());
+        num_proc_channels());
   }
 }
 
 void AudioProcessingImpl::InitializeBeamformer() {
-  if (constants_.beamformer_enabled) {
+  if (capture_nonlocked_.beamformer_enabled) {
     if (!private_submodules_->beamformer) {
       private_submodules_->beamformer.reset(new NonlinearBeamformer(
-          constants_.array_geometry, constants_.target_direction));
+          capture_.array_geometry, capture_.target_direction));
     }
     private_submodules_->beamformer->Initialize(kChunkSizeMs,
                                                 capture_nonlocked_.split_rate);
@@ -1309,12 +1324,12 @@ void AudioProcessingImpl::InitializeIntelligibility() {
 }
 
 void AudioProcessingImpl::InitializeHighPassFilter() {
-  public_submodules_->high_pass_filter->Initialize(num_output_channels(),
+  public_submodules_->high_pass_filter->Initialize(num_proc_channels(),
                                                    proc_sample_rate_hz());
 }
 
 void AudioProcessingImpl::InitializeNoiseSuppression() {
-  public_submodules_->noise_suppression->Initialize(num_output_channels(),
+  public_submodules_->noise_suppression->Initialize(num_proc_channels(),
                                                     proc_sample_rate_hz());
 }
 
@@ -1346,8 +1361,9 @@ void AudioProcessingImpl::MaybeUpdateHistograms() {
         capture_nonlocked_.stream_delay_ms - capture_.last_stream_delay_ms;
     if (diff_stream_delay_ms > kMinDiffDelayMs &&
         capture_.last_stream_delay_ms != 0) {
-      RTC_HISTOGRAM_COUNTS("WebRTC.Audio.PlatformReportedStreamDelayJump",
-                           diff_stream_delay_ms, kMinDiffDelayMs, 1000, 100);
+      RTC_HISTOGRAM_COUNTS_SPARSE(
+          "WebRTC.Audio.PlatformReportedStreamDelayJump", diff_stream_delay_ms,
+          kMinDiffDelayMs, 1000, 100);
       if (capture_.stream_delay_jumps == -1) {
         capture_.stream_delay_jumps = 0;  // Activate counter if needed.
       }
@@ -1364,9 +1380,9 @@ void AudioProcessingImpl::MaybeUpdateHistograms() {
         aec_system_delay_ms - capture_.last_aec_system_delay_ms;
     if (diff_aec_system_delay_ms > kMinDiffDelayMs &&
         capture_.last_aec_system_delay_ms != 0) {
-      RTC_HISTOGRAM_COUNTS("WebRTC.Audio.AecSystemDelayJump",
-                           diff_aec_system_delay_ms, kMinDiffDelayMs, 1000,
-                           100);
+      RTC_HISTOGRAM_COUNTS_SPARSE("WebRTC.Audio.AecSystemDelayJump",
+                                  diff_aec_system_delay_ms, kMinDiffDelayMs,
+                                  1000, 100);
       if (capture_.aec_system_delay_jumps == -1) {
         capture_.aec_system_delay_jumps = 0;  // Activate counter if needed.
       }
@@ -1382,7 +1398,7 @@ void AudioProcessingImpl::UpdateHistogramsOnCallEnd() {
   rtc::CritScope cs_capture(&crit_capture_);
 
   if (capture_.stream_delay_jumps > -1) {
-    RTC_HISTOGRAM_ENUMERATION(
+    RTC_HISTOGRAM_ENUMERATION_SPARSE(
         "WebRTC.Audio.NumOfPlatformReportedStreamDelayJumps",
         capture_.stream_delay_jumps, 51);
   }
@@ -1390,8 +1406,8 @@ void AudioProcessingImpl::UpdateHistogramsOnCallEnd() {
   capture_.last_stream_delay_ms = 0;
 
   if (capture_.aec_system_delay_jumps > -1) {
-    RTC_HISTOGRAM_ENUMERATION("WebRTC.Audio.NumOfAecSystemDelayJumps",
-                              capture_.aec_system_delay_jumps, 51);
+    RTC_HISTOGRAM_ENUMERATION_SPARSE("WebRTC.Audio.NumOfAecSystemDelayJumps",
+                                     capture_.aec_system_delay_jumps, 51);
   }
   capture_.aec_system_delay_jumps = -1;
   capture_.last_aec_system_delay_ms = 0;
@@ -1438,12 +1454,12 @@ int AudioProcessingImpl::WriteInitMessage() {
   audioproc::Init* msg = debug_dump_.capture.event_msg->mutable_init();
   msg->set_sample_rate(formats_.api_format.input_stream().sample_rate_hz());
 
-  msg->set_num_input_channels(
-      formats_.api_format.input_stream().num_channels());
-  msg->set_num_output_channels(
-      formats_.api_format.output_stream().num_channels());
-  msg->set_num_reverse_channels(
-      formats_.api_format.reverse_input_stream().num_channels());
+  msg->set_num_input_channels(static_cast<google::protobuf::int32>(
+      formats_.api_format.input_stream().num_channels()));
+  msg->set_num_output_channels(static_cast<google::protobuf::int32>(
+      formats_.api_format.output_stream().num_channels()));
+  msg->set_num_reverse_channels(static_cast<google::protobuf::int32>(
+      formats_.api_format.reverse_input_stream().num_channels()));
   msg->set_reverse_sample_rate(
       formats_.api_format.reverse_input_stream().sample_rate_hz());
   msg->set_output_sample_rate(

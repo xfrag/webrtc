@@ -106,7 +106,7 @@ const CodecInst ACMCodecDB::database_[] = {
   {127, "red", 8000, 0, 1, 0},
 #endif
   // To prevent compile errors due to trailing commas.
-  {-1, "Null", -1, -1, -1, -1}
+  {-1, "Null", -1, -1, 0, -1}
 };
 
 // Create database with all codec settings at compile time.
@@ -162,7 +162,7 @@ const ACMCodecDB::CodecSettings ACMCodecDB::codec_settings_[] = {
     {1, {0}, 0, 1},
 #endif
     // To prevent compile errors due to trailing commas.
-    {-1, {-1}, -1, -1}
+    {-1, {-1}, -1, 0}
 };
 
 // Create a database of all NetEQ decoders at compile time.
@@ -292,7 +292,9 @@ int ACMCodecDB::CodecId(const CodecInst& codec_inst) {
                   codec_inst.channels));
 }
 
-int ACMCodecDB::CodecId(const char* payload_name, int frequency, int channels) {
+int ACMCodecDB::CodecId(const char* payload_name,
+                        int frequency,
+                        size_t channels) {
   for (const CodecInst& ci : RentACodec::Database()) {
     bool name_match = false;
     bool frequency_match = false;

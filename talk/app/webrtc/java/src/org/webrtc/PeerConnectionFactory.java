@@ -84,7 +84,11 @@ public class PeerConnectionFactory {
   public static native void stopInternalTracingCapture();
 
   public PeerConnectionFactory() {
-    nativeFactory = nativeCreatePeerConnectionFactory();
+    this(null);
+  }
+
+  public PeerConnectionFactory(AppAudioDeviceModule module) {
+    nativeFactory = nativeCreatePeerConnectionFactory(module == null ? 0 : module.nativeModule);
     if (nativeFactory == 0) {
       throw new RuntimeException("Failed to initialize PeerConnectionFactory!");
     }
@@ -225,7 +229,7 @@ public class PeerConnectionFactory {
     Logging.d(TAG, "onSignalingThreadReady");
   }
 
-  private static native long nativeCreatePeerConnectionFactory();
+  private static native long nativeCreatePeerConnectionFactory(long nativeAdm);
 
   private static native long nativeCreateObserver(
       PeerConnection.Observer observer);

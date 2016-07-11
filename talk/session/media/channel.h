@@ -179,8 +179,11 @@ class BaseChannel
   // Sets the |transport_channel_| (and |rtcp_transport_channel_|, if |rtcp_| is
   // true). Gets the transport channels from |transport_controller_|.
   bool SetTransport_w(const std::string& transport_name);
+
   void set_transport_channel(TransportChannel* transport);
-  void set_rtcp_transport_channel(TransportChannel* transport);
+  void set_rtcp_transport_channel(TransportChannel* transport,
+                                  bool update_writablity);
+
   bool was_ever_writable() const { return was_ever_writable_; }
   void set_local_content_direction(MediaContentDirection direction) {
     local_content_direction_ = direction;
@@ -464,8 +467,6 @@ class VideoChannel : public BaseChannel {
   // True if we've added a screencast.  Doesn't matter if the capturer
   // has been started or not.
   bool IsScreencasting();
-  int GetScreencastFps(uint32_t ssrc);
-  int GetScreencastMaxPixels(uint32_t ssrc);
   // Get statistics about the current media session.
   bool GetStats(VideoMediaInfo* stats);
 
@@ -484,7 +485,6 @@ class VideoChannel : public BaseChannel {
 
  private:
   typedef std::map<uint32_t, VideoCapturer*> ScreencastMap;
-  struct ScreencastDetailsData;
 
   // overrides from BaseChannel
   virtual void ChangeState();
@@ -501,7 +501,6 @@ class VideoChannel : public BaseChannel {
   bool RemoveScreencast_w(uint32_t ssrc);
   void OnScreencastWindowEvent_s(uint32_t ssrc, rtc::WindowEvent we);
   bool IsScreencasting_w() const;
-  void GetScreencastDetails_w(ScreencastDetailsData* d) const;
   bool GetStats_w(VideoMediaInfo* stats);
 
   virtual void OnMessage(rtc::Message* pmsg);

@@ -177,7 +177,8 @@ static_library("rtc_base") {
   cflags = []
   cflags_cc = []
   libs = []
-  deps = [
+  deps = []
+  public_deps = [
     ":rtc_base_approved",
   ]
 
@@ -214,7 +215,6 @@ static_library("rtc_base") {
     "autodetectproxy.h",
     "base64.cc",
     "base64.h",
-    "basicdefs.h",
     "common.cc",
     "common.h",
     "crc32.cc",
@@ -332,6 +332,8 @@ static_library("rtc_base") {
 
   if (is_posix) {
     sources += [
+      "ifaddrs-android.h",
+      "ifaddrs_converter.cc",
       "unixfilesystem.cc",
       "unixfilesystem.h",
     ]
@@ -339,6 +341,10 @@ static_library("rtc_base") {
 
   if (build_with_chromium) {
     deps += [ "..:webrtc_common" ]
+
+    if (is_mac) {
+      sources += [ "macifaddrs_converter.cc" ]
+    }
 
     if (is_win) {
       sources += [ "../../webrtc_overrides/webrtc/base/win32socketinit.cc" ]
@@ -607,6 +613,7 @@ static_library("rtc_base") {
   if (is_nacl) {
     deps += [ "//native_client_sdk/src/libraries/nacl_io" ]
     defines += [ "timezone=_timezone" ]
+    sources -= [ "ifaddrs_converter.cc" ]
   }
 }
 

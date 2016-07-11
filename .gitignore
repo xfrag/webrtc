@@ -84,6 +84,7 @@
 /third_party/binutils
 /third_party/boringssl
 /third_party/BUILD.gn
+/third_party/catapult
 /third_party/clang_format
 /third_party/class-dump
 /third_party/colorama
@@ -91,6 +92,7 @@
 /third_party/directxsdk
 /third_party/drmemory
 /third_party/expat
+/third_party/ffmpeg
 /third_party/gaeunit
 /third_party/gflags/src
 /third_party/google-visualization-python
@@ -121,6 +123,7 @@
 /third_party/nss
 /third_party/oauth2
 /third_party/ocmock
+/third_party/openh264
 /third_party/openmax_dl
 /third_party/opus
 /third_party/proguard
@@ -147,6 +150,7 @@
 /tools/python
 /tools/sanitizer_options
 /tools/swarming_client
+/tools/telemetry
 /tools/tsan_suppressions
 /tools/valgrind
 /tools/vim

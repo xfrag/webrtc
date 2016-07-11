@@ -64,6 +64,7 @@ void FreeGlobalClassReferenceHolder() {
 ClassReferenceHolder::ClassReferenceHolder(JNIEnv* jni) {
   LoadClass(jni, "java/nio/ByteBuffer");
   LoadClass(jni, "java/util/ArrayList");
+  LoadClass(jni, "org/webrtc/AppAudioDeviceModule");
   LoadClass(jni, "org/webrtc/AudioTrack");
   LoadClass(jni, "org/webrtc/DataChannel");
   LoadClass(jni, "org/webrtc/DataChannel$Buffer");
@@ -72,7 +73,6 @@ ClassReferenceHolder::ClassReferenceHolder(JNIEnv* jni) {
   LoadClass(jni, "org/webrtc/IceCandidate");
 #if defined(ANDROID) && !defined(WEBRTC_CHROMIUM_BUILD)
   LoadClass(jni, "android/graphics/SurfaceTexture");
-  LoadClass(jni, "javax/microedition/khronos/egl/EGLContext");
   LoadClass(jni, "org/webrtc/CameraEnumerator");
   LoadClass(jni, "org/webrtc/Camera2Enumerator");
   LoadClass(jni, "org/webrtc/CameraEnumerationAndroid");
@@ -80,6 +80,7 @@ ClassReferenceHolder::ClassReferenceHolder(JNIEnv* jni) {
   LoadClass(jni, "org/webrtc/VideoCapturerAndroid$NativeObserver");
   LoadClass(jni, "org/webrtc/EglBase");
   LoadClass(jni, "org/webrtc/EglBase$Context");
+  LoadClass(jni, "org/webrtc/EglBase14$Context");
   LoadClass(jni, "org/webrtc/NetworkMonitor");
   LoadClass(jni, "org/webrtc/MediaCodecVideoEncoder");
   LoadClass(jni, "org/webrtc/MediaCodecVideoEncoder$OutputBufferInfo");

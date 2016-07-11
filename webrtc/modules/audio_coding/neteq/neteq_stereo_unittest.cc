@@ -21,14 +21,13 @@
 #include "webrtc/modules/audio_coding/neteq/tools/input_audio_file.h"
 #include "webrtc/modules/audio_coding/neteq/tools/rtp_generator.h"
 #include "webrtc/test/testsupport/fileutils.h"
-#include "webrtc/test/testsupport/gtest_disable.h"
 
 namespace webrtc {
 
 struct TestParameters {
   int frame_size;
   int sample_rate;
-  int num_channels;
+  size_t num_channels;
 };
 
 // This is a parameterized test. The test parameters are supplied through a
@@ -164,7 +163,7 @@ class NetEqStereoTest : public ::testing::TestWithParam<TestParameters> {
 
   void VerifyOutput(size_t num_samples) {
     for (size_t i = 0; i < num_samples; ++i) {
-      for (int j = 0; j < num_channels_; ++j) {
+      for (size_t j = 0; j < num_channels_; ++j) {
         ASSERT_EQ(output_[i], output_multi_channel_[i * num_channels_ + j]) <<
             "Diff in sample " << i << ", channel " << j << ".";
       }
@@ -215,12 +214,12 @@ class NetEqStereoTest : public ::testing::TestWithParam<TestParameters> {
       NetEqOutputType output_type;
       // Get audio from mono instance.
       size_t samples_per_channel;
-      int num_channels;
+      size_t num_channels;
       EXPECT_EQ(NetEq::kOK,
                 neteq_mono_->GetAudio(kMaxBlockSize, output_,
                                       &samples_per_channel, &num_channels,
                                       &output_type));
-      EXPECT_EQ(1, num_channels);
+      EXPECT_EQ(1u, num_channels);
       EXPECT_EQ(output_size_samples_, samples_per_channel);
       // Get audio from multi-channel instance.
       ASSERT_EQ(NetEq::kOK,
@@ -240,7 +239,7 @@ class NetEqStereoTest : public ::testing::TestWithParam<TestParameters> {
     }
   }
 
-  const int num_channels_;
+  const size_t num_channels_;
   const int sample_rate_hz_;
   const int samples_per_ms_;
   const int frame_size_ms_;
@@ -276,7 +275,12 @@ class NetEqStereoTestNoJitter : public NetEqStereoTest {
   }
 };
 
-TEST_P(NetEqStereoTestNoJitter, DISABLED_ON_ANDROID(RunTest)) {
+#if defined(WEBRTC_ANDROID)
+#define MAYBE_RunTest DISABLED_RunTest
+#else
+#define MAYBE_RunTest RunTest
+#endif
+TEST_P(NetEqStereoTestNoJitter, MAYBE_RunTest) {
   RunTest(8);
 }
 
@@ -301,7 +305,7 @@ class NetEqStereoTestPositiveDrift : public NetEqStereoTest {
   double drift_factor;
 };
 
-TEST_P(NetEqStereoTestPositiveDrift, DISABLED_ON_ANDROID(RunTest)) {
+TEST_P(NetEqStereoTestPositiveDrift, MAYBE_RunTest) {
   RunTest(100);
 }
 
@@ -314,7 +318,7 @@ class NetEqStereoTestNegativeDrift : public NetEqStereoTestPositiveDrift {
   }
 };
 
-TEST_P(NetEqStereoTestNegativeDrift, DISABLED_ON_ANDROID(RunTest)) {
+TEST_P(NetEqStereoTestNegativeDrift, MAYBE_RunTest) {
   RunTest(100);
 }
 
@@ -342,7 +346,7 @@ class NetEqStereoTestDelays : public NetEqStereoTest {
   int frame_index_;
 };
 
-TEST_P(NetEqStereoTestDelays, DISABLED_ON_ANDROID(RunTest)) {
+TEST_P(NetEqStereoTestDelays, MAYBE_RunTest) {
   RunTest(1000);
 }
 
@@ -361,7 +365,10 @@ class NetEqStereoTestLosses : public NetEqStereoTest {
   int frame_index_;
 };
 
-TEST_P(NetEqStereoTestLosses, DISABLED_ON_ANDROID(RunTest)) {
+// TODO(pbos): Enable on non-Android, this went failing while being accidentally
+// disabled on all platforms and not just Android.
+// https://bugs.chromium.org/p/webrtc/issues/detail?id=5387
+TEST_P(NetEqStereoTestLosses, DISABLED_RunTest) {
   RunTest(100);
 }
 

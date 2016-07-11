@@ -43,8 +43,8 @@
     ['OS=="linux" or OS=="android"', {
       'targets': [
         {
-          'target_name': 'libjingle_peerconnection_so',
-          'type': 'shared_library',
+          'target_name': 'libjingle_peerconnection_jni',
+          'type': 'static_library',
           'dependencies': [
             '<(webrtc_root)/system_wrappers/system_wrappers.gyp:field_trial_default',
             'libjingle_peerconnection',
@@ -56,11 +56,62 @@
             'app/webrtc/java/jni/jni_helpers.h',
             'app/webrtc/java/jni/native_handle_impl.cc',
             'app/webrtc/java/jni/native_handle_impl.h',
+            'app/webrtc/java/jni/app_audio_device.cc',
+            'app/webrtc/java/jni/app_audio_device.h',
             'app/webrtc/java/jni/peerconnection_jni.cc',
           ],
           'include_dirs': [
             '<(libyuv_dir)/include',
           ],
+          'conditions': [
+            ['OS=="linux"', {
+              'include_dirs': [
+                '<(java_home)/include',
+                '<(java_home)/include/linux',
+              ],
+            }],
+           ['build_json==1', {
+              'dependencies': [
+                '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
+              ],
+              'export_dependent_settings': [
+                '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
+              ],
+            }],
+            ['OS=="android"', {
+              'sources': [
+                'app/webrtc/androidvideocapturer.cc',
+                'app/webrtc/androidvideocapturer.h',
+                'app/webrtc/java/jni/androidmediacodeccommon.h',
+                'app/webrtc/java/jni/androidmediadecoder_jni.cc',
+                'app/webrtc/java/jni/androidmediadecoder_jni.h',
+                'app/webrtc/java/jni/androidmediaencoder_jni.cc',
+                'app/webrtc/java/jni/androidmediaencoder_jni.h',
+                'app/webrtc/java/jni/androidnetworkmonitor_jni.cc',
+                'app/webrtc/java/jni/androidnetworkmonitor_jni.h',
+                'app/webrtc/java/jni/androidvideocapturer_jni.cc',
+                'app/webrtc/java/jni/androidvideocapturer_jni.h',
+                'app/webrtc/java/jni/surfacetexturehelper_jni.cc',
+                'app/webrtc/java/jni/surfacetexturehelper_jni.h',
+              ]
+            }],
+          ],
+        },
+        {
+          'target_name': 'libjingle_peerconnection_so',
+          'type': 'shared_library',
+          'dependencies': [
+            'libjingle_peerconnection',
+            'libjingle_peerconnection_jni',
+          ],
+          'sources': [
+           'app/webrtc/java/jni/jni_onload.cc',
+          ],
+          'variables': {
+            # This library uses native JNI exports; tell GYP so that the
+            # required symbols will be kept.
+            'use_native_jni_exports': 1,
+          },
           'conditions': [
             ['OS=="linux"', {
               'defines': [
@@ -72,6 +123,9 @@
               ],
               'conditions': [
                 ['use_gtk==1', {
+                  'defines': [
+                    'USE_GTK',
+                  ],
                   'link_settings': {
                     'libraries': [
                       '<!@(pkg-config --libs-only-l gobject-2.0 gthread-2.0'
@@ -80,30 +134,6 @@
                   },
                 }],
               ],
-            }],
-            ['OS=="android"', {
-              'sources': [
-                'app/webrtc/java/jni/androidvideocapturer_jni.cc',
-                'app/webrtc/java/jni/androidvideocapturer_jni.h',
-              ],
-              'variables': {
-                # This library uses native JNI exports; tell GYP so that the
-                # required symbols will be kept.
-                'use_native_jni_exports': 1,
-              },
-            }],
-            ['OS=="android" and build_with_chromium==0', {
-              'sources': [
-                'app/webrtc/java/jni/androidmediacodeccommon.h',
-                'app/webrtc/java/jni/androidmediadecoder_jni.cc',
-                'app/webrtc/java/jni/androidmediadecoder_jni.h',
-                'app/webrtc/java/jni/androidmediaencoder_jni.cc',
-                'app/webrtc/java/jni/androidmediaencoder_jni.h',
-                'app/webrtc/java/jni/androidnetworkmonitor_jni.cc',
-                'app/webrtc/java/jni/androidnetworkmonitor_jni.h',
-                'app/webrtc/java/jni/surfacetexturehelper_jni.cc',
-                'app/webrtc/java/jni/surfacetexturehelper_jni.h',
-              ]
             }],
           ],
         },
@@ -123,6 +153,7 @@
                 'peerconnection_java_files': [
                   'app/webrtc/java/src/org/webrtc/AudioSource.java',
                   'app/webrtc/java/src/org/webrtc/AudioTrack.java',
+                  'app/webrtc/java/src/org/webrtc/AppAudioDeviceModule.java',
                   'app/webrtc/java/src/org/webrtc/CallSessionFileRotatingLogSink.java',
                   'app/webrtc/java/src/org/webrtc/DataChannel.java',
                   'app/webrtc/java/src/org/webrtc/IceCandidate.java',
@@ -357,6 +388,9 @@
             # common.gypi enables this for mac but we want this to be disabled
             # like it is for ios.
             'CLANG_WARN_OBJC_MISSING_PROPERTY_SYNTHESIS': 'NO',
+            # Disabled due to failing when compiled with -Wall, see
+            # https://bugs.chromium.org/p/webrtc/issues/detail?id=5397
+            'WARNING_CFLAGS': ['-Wno-unused-property-ivar'],
           },
           'conditions': [
             ['OS=="ios"', {
@@ -684,9 +718,15 @@
       'include_dirs': [
         '<(DEPTH)/testing/gtest/include',
       ],
+      'include_dirs!': [
+        '<(DEPTH)/webrtc',
+      ],
       'direct_dependent_settings': {
         'include_dirs': [
           '<(DEPTH)/testing/gtest/include',
+        ],
+        'include_dirs!': [
+          '<(DEPTH)/webrtc',
         ],
       },
       'sources': [
@@ -731,7 +771,6 @@
         'app/webrtc/dtmfsender.cc',
         'app/webrtc/dtmfsender.h',
         'app/webrtc/dtmfsenderinterface.h',
-        'app/webrtc/fakeportallocatorfactory.h',
         'app/webrtc/jsep.h',
         'app/webrtc/jsepicecandidate.cc',
         'app/webrtc/jsepicecandidate.h',
@@ -760,8 +799,6 @@
         'app/webrtc/peerconnectionfactoryproxy.h',
         'app/webrtc/peerconnectioninterface.h',
         'app/webrtc/peerconnectionproxy.h',
-        'app/webrtc/portallocatorfactory.cc',
-        'app/webrtc/portallocatorfactory.h',
         'app/webrtc/proxy.h',
         'app/webrtc/remoteaudiosource.cc',
         'app/webrtc/remoteaudiosource.h',
@@ -794,14 +831,6 @@
         'app/webrtc/webrtcsession.h',
         'app/webrtc/webrtcsessiondescriptionfactory.cc',
         'app/webrtc/webrtcsessiondescriptionfactory.h',
-      ],
-      'conditions': [
-        ['OS=="android" and build_with_chromium==0', {
-          'sources': [
-            'app/webrtc/androidvideocapturer.h',
-            'app/webrtc/androidvideocapturer.cc',
-           ],
-        }],
       ],
     },  # target libjingle_peerconnection
   ],
